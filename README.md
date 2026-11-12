@@ -2,7 +2,7 @@
 
 **A safe, quota-aware controller for deterministic jobs across multiple GitHub Actions repository owners.** No paid service required for the controller, no external Python packages, and no dependence on Codex/Work for jobs already implemented as ordinary scripts.
 
-> v0.4.0 — Gmail alert routing preview (requires owner setup) — verified pilot, not production trading software. Explicit GitHub workflow dispatch is supported; automatic unattended scheduling and live multi-owner deployment are **not** enabled. When billing data is unavailable or stale, private repo jobs are blocked. This is intentional.
+> v0.4.1 — Gmail alert routing preview (requires owner setup) — verified pilot, not production trading software. Explicit GitHub workflow dispatch is supported; automatic unattended scheduling and live multi-owner deployment are **not** enabled. When billing data is unavailable or stale, private repo jobs are blocked. This is intentional.
 
 [راهنمای فارسی](README.fa.md) · [Security](SECURITY.md) · [Architecture](docs/ARCHITECTURE.md) · [Activation approvals (FA)](docs/ACTIVATION_APPROVALS_FA.md) · [Activation approvals (EN)](docs/ACTIVATION_APPROVALS_EN.md)
 
