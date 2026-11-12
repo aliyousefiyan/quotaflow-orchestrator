@@ -16,11 +16,14 @@
  */
 function qfProperties_() {
   const p=PropertiesService.getScriptProperties();
-  const needed=["QF_OWNER_MAP_JSON","QF_PRIVATE_REPO","QF_ISSUE_NUMBER","QF_ISSUES_PAT","QF_HMAC_SECRET"];
-  const cfg={};
+  const cfg={dryRun:p.getProperty("QF_DRY_RUN")!=="false"};
+  cfg.QF_OWNER_MAP_JSON=p.getProperty("QF_OWNER_MAP_JSON")||"";
+  if(!cfg.QF_OWNER_MAP_JSON) throw new Error("Gmail owner mapping missing");
+  // Dry-run intentionally needs NO GitHub token and NO shared HMAC secret.
+  const needed=["QF_PRIVATE_REPO","QF_ISSUE_NUMBER","QF_ISSUES_PAT","QF_HMAC_SECRET"];
   for (const k of needed) {
     cfg[k]=p.getProperty(k) || "";
-    if (!cfg[k]) throw new Error("Missing private QuotaFlow property "+k);
+    if(!cfg.dryRun&&!cfg[k]) throw new Error("Missing private QuotaFlow property "+k);
   }
   cfg.owners=JSON.parse(cfg.QF_OWNER_MAP_JSON);
   if (Object.keys(cfg.owners).length!==2) throw new Error("Exactly two Gmail owners must be mapped");
@@ -30,7 +33,6 @@ function qfProperties_() {
   }
   if(!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(cfg.QF_PRIVATE_REPO)||
      !/^[1-9]\d*$/.test(cfg.QF_ISSUE_NUMBER)) throw new Error("Unsafe private issue locator");
-  cfg.dryRun=p.getProperty("QF_DRY_RUN")!=="false";
   return cfg;
 }
 function qfHex_(bytes) {
@@ -67,6 +69,7 @@ function qfParse_(msg,owners) {
   const subject=String(msg.getSubject()||"");
   const body=String(msg.getPlainBody()||"").slice(0,18000);
   const text=subject+"\n"+body;
+  if(/\b(storage|artifact storage|registry|packages|codespaces|copilot)\b/i.test(subject)) return null;
   if(!/github\s+actions?\b|\bactions?\s+(minutes|compute|usage|billing|budget)\b/i.test(text)) return null;
   if(!/\b(used|usage|included|budget|reached|exceeded|threshold|consumed|spend|spent)\b/i.test(text)) return null;
   const subjectPct=[...subject.matchAll(/\b(75|85|90|100)\s*%/g)].map(m=>Number(m[1]));
