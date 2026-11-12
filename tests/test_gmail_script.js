@@ -96,3 +96,47 @@ assert.equal(manifest.oauthScopes.includes("https://www.googleapis.com/auth/gmai
 assert.equal(manifest.oauthScopes.includes("https://www.googleapis.com/auth/gmail.send"),false);
 console.log("Gmail REST readonly backend: 13 assertions PASS");
 
+
+// Exact real-world GitHub Actions included-minutes email SUBJECT supplied
+// by the operator, with synthetic sender/auth and without any private body.
+const twoAccounts={"aliyousefiyan":"owner_a","aliyousefiyan70-code":"owner_b"};
+const realSubject="[GitHub] You have used 100% of the Actions minutes included for the aliyousefiyan account";
+const exactSample=message({
+  subject:realSubject,
+  body:"",
+  sender:"GitHub <billing@github.com>",
+  auth:"mx.google.com; dkim=pass header.d=github.com;"
+});
+assert.equal(sandbox.qfParse_(exactSample,twoAccounts).owner_id,"owner_a");
+assert.equal(sandbox.qfParse_(exactSample,twoAccounts).threshold_pct,100);
+assert.equal(sandbox.qfDiagnosticReason_(exactSample,twoAccounts),"recognized_candidate");
+assert.equal(sandbox.qfDiagnosticReason_(message({subject:realSubject,body:"",auth:""}),twoAccounts),"authentication_header_missing");
+assert.equal(sandbox.qfDiagnosticReason_(message({subject:realSubject,body:"",auth:"dkim=fail header.d=github.com"}),twoAccounts),"github_dkim_unverified");
+assert.equal(sandbox.qfDiagnosticReason_(message({subject:realSubject,body:"",sender:"bad@spoof.invalid"}),twoAccounts),"sender_domain_unverified");
+assert.equal(sandbox.qfDiagnosticReason_(message({
+  subject:"[GitHub] You have used 100% of the Actions minutes included for the aliyousefiyan70-code account",body:""
+}),twoAccounts),"recognized_candidate");
+assert.equal(sandbox.qfParse_(message({
+  subject:"[GitHub] You have used 100% of the Actions minutes included for the aliyousefiyan70-code account",body:""
+}),twoAccounts).owner_id,"owner_b");
+// Bounded diagnostic read-only mode may not trigger any private GitHub writes.
+let noWriteLogged="";
+sandbox.PropertiesService={getScriptProperties:()=>({
+  getProperty:(name)=>({
+    QF_DRY_RUN:"true",
+    QF_OWNER_MAP_JSON:JSON.stringify(twoAccounts)
+  })[name]||""
+})};
+sandbox.console.log=(item)=>{noWriteLogged=String(item)};
+sandbox.diagnoseQuotaFlowAlerts();
+const diagnostic=JSON.parse(noWriteLogged);
+assert.equal(diagnostic.mode,"historic_readonly");
+assert.equal(diagnostic.lookback_days,90);
+assert.equal(diagnostic.no_remote_writes,true);
+assert.equal(issuedRequests.every(x=>x.method==="get"),true);
+assert.equal(diagnostic.scanned,1);
+assert.equal(Object.values(diagnostic.reason_counts).reduce((x,y)=>x+y,0),1);
+assert.equal(Object.keys(diagnostic).includes("subject"),false);
+console.log("Real 100% subject + bounded privacy-safe Gmail diagnosis: 14 assertions PASS");
+
+
