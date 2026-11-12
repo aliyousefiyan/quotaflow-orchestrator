@@ -1,0 +1,49 @@
+{
+  "schema": 1,
+  "visibility": "LOCAL_ONLY_DO_NOT_COMMIT_REAL_BUDGETS_OR_SECRETS",
+  "owners": [
+    {
+      "alias": "owner_a",
+      "identity_checked": false,
+      "billing_observed_utc": null,
+      "remaining_actions_usd": null,
+      "remaining_actions_minutes": null,
+      "units_verified": false,
+      "hard_spend_limit_confirmed": false,
+      "private_worker_contract_verified": false,
+      "dispatcher_token_scoped": false,
+      "dispatcher_token_secret_location": "NOT_IN_THIS_FILE",
+      "smoke_run_url": null
+    },
+    {
+      "alias": "owner_b",
+      "identity_checked": false,
+      "billing_observed_utc": null,
+      "remaining_actions_usd": null,
+      "remaining_actions_minutes": null,
+      "units_verified": false,
+      "hard_spend_limit_confirmed": false,
+      "private_worker_contract_verified": false,
+      "dispatcher_token_scoped": false,
+      "dispatcher_token_secret_location": "NOT_IN_THIS_FILE",
+      "smoke_run_url": null
+    },
+    {
+      "alias": "owner_c",
+      "identity_checked": false,
+      "billing_observed_utc": null,
+      "remaining_actions_usd": null,
+      "remaining_actions_minutes": null,
+      "units_verified": false,
+      "hard_spend_limit_confirmed": false,
+      "private_worker_contract_verified": false,
+      "dispatcher_token_scoped": false,
+      "dispatcher_token_secret_location": "NOT_IN_THIS_FILE",
+      "smoke_run_url": null
+    }
+  ],
+  "private_run_authorized": false,
+  "real_project_job_authorized": false,
+  "trading_or_vps_changes_authorized": false,
+  "note": "Reference checklist only, NOT a valid quotas.json, no live values, and it never authorizes dispatch."
+}
