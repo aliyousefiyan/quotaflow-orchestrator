@@ -27,6 +27,26 @@ CREATE TABLE IF NOT EXISTS jobs (
  updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_jobs_status ON jobs(status);
+CREATE TABLE IF NOT EXISTS quota_alerts (
+  event_id TEXT PRIMARY KEY,
+  owner_id TEXT NOT NULL,
+  threshold_pct INTEGER NOT NULL,
+  action TEXT NOT NULL,
+  observed_at TEXT NOT NULL,
+  ingested_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS quota_source_health (
+  source TEXT PRIMARY KEY,
+  last_success_utc TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS quota_account_holds (
+  owner_id TEXT PRIMARY KEY,
+  level TEXT NOT NULL,
+  threshold_pct INTEGER NOT NULL,
+  event_id TEXT NOT NULL,
+  observed_at TEXT NOT NULL
+);
+
 """
 
 class QueueDB:
@@ -96,3 +116,77 @@ class QueueDB:
         except BaseException:
             self.conn.execute("ROLLBACK")
             raise
+
+    def account_hold(self, owner_id):
+        """Only an explicitly acknowledged verified reset can remove a hold."""
+        row=self.conn.execute("SELECT level,threshold_pct,observed_at FROM quota_account_holds WHERE owner_id=?",(owner_id,)).fetchone()
+        return dict(row) if row else None
+
+    def record_quota_alert(self, *, event_id, owner_id, threshold_pct, observed_at):
+        """Commit immutable alert + monotonic status in one transaction; duplicate safe."""
+        from .alerts import validate_alert_parts
+        validate_alert_parts(event_id,owner_id,threshold_pct,observed_at)
+        now=utcnow()
+        action="hold" if threshold_pct>=85 else "warn"
+        self.conn.execute("BEGIN IMMEDIATE")
+        try:
+            prev=self.conn.execute("SELECT owner_id,threshold_pct,observed_at FROM quota_alerts WHERE event_id=?",(event_id,)).fetchone()
+            if prev:
+                if tuple(prev)!=(owner_id,threshold_pct,observed_at):
+                    raise ConfigError("Alert event ID reused with different content")
+                self.conn.execute("COMMIT")
+                return "already_ingested"
+            self.conn.execute("INSERT INTO quota_alerts(event_id,owner_id,threshold_pct,action,observed_at,ingested_at) VALUES (?,?,?,?,?,?)",
+                              (event_id,owner_id,threshold_pct,action,observed_at,now))
+            current=self.conn.execute("SELECT level,threshold_pct,observed_at FROM quota_account_holds WHERE owner_id=?",(owner_id,)).fetchone()
+            # Out-of-order older messages may NOT reinstate a weaker state, downgrade hold,
+            # or move the observation timestamp backwards.
+            if (not current or
+                (observed_at>=current["observed_at"] and
+                 (current["level"]!="hold" or action=="hold"))):
+                self.conn.execute("""INSERT INTO quota_account_holds(owner_id,level,threshold_pct,event_id,observed_at)
+                    VALUES (?,?,?,?,?)
+                    ON CONFLICT(owner_id) DO UPDATE SET level=excluded.level,
+                        threshold_pct=excluded.threshold_pct,event_id=excluded.event_id,
+                        observed_at=excluded.observed_at""",(owner_id,action,threshold_pct,event_id,observed_at))
+            self.conn.execute("COMMIT")
+            return action
+        except BaseException:
+            self.conn.execute("ROLLBACK")
+            raise
+
+    def acknowledge_new_period(self,owner_id,*,observed_at,verified_budget_available,approved):
+        """A missing/bad budget MUST NOT lift an email hold. Never called by email intake."""
+        from .models import timestamp
+        if not approved or not verified_budget_available:
+            raise ConfigError("Explicit operator approval and separately verified new budget are required")
+        moment=timestamp(observed_at)
+        now=datetime.now(timezone.utc)
+        if not -300 <= (now-moment).total_seconds() <= 12*3600:
+            raise ConfigError("New budget verification must be fresh")
+        self.conn.execute("BEGIN IMMEDIATE")
+        try:
+            prior=self.conn.execute("SELECT observed_at FROM quota_account_holds WHERE owner_id=?",(owner_id,)).fetchone()
+            if prior and observed_at<=prior["observed_at"]:
+                raise ConfigError("Budget verification must be later than last alert")
+            self.conn.execute("DELETE FROM quota_account_holds WHERE owner_id=?",(owner_id,))
+            self.conn.execute("COMMIT")
+        except BaseException:
+            self.conn.execute("ROLLBACK")
+            raise
+
+    def mark_alert_source_checked(self):
+        """Only call after a complete authenticated private-issue read succeeded."""
+        self.conn.execute("""INSERT INTO quota_source_health(source,last_success_utc)
+              VALUES ('github_private_issue',?)
+              ON CONFLICT(source) DO UPDATE SET last_success_utc=excluded.last_success_utc""",
+              (utcnow(),))
+
+    def alert_source_fresh(self, max_age_minutes=60):
+        row=self.conn.execute(
+            "SELECT last_success_utc FROM quota_source_health WHERE source='github_private_issue'"
+        ).fetchone()
+        if not row: return False
+        from .models import timestamp
+        age=(datetime.now(timezone.utc)-timestamp(row[0])).total_seconds()
+        return -300<=age<=max_age_minutes*60

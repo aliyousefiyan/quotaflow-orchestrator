@@ -26,6 +26,11 @@ jobs:
         run: python -m unittest discover -s tests -t . -v
       - name: Check syntax
         run: python -m compileall -q quotaflow
+      - name: Verify Gmail Apps Script syntax and parser safety
+        run: |
+          cp integrations/google_apps_script/Code.gs /tmp/quotaflow-gmail-script.js
+          node --check /tmp/quotaflow-gmail-script.js
+          node tests/test_gmail_script.js
       - name: Offline simulation
         run: |
           python -m quotaflow --config examples/accounts.example.json --budgets examples/budgets.unknown.json --state /tmp/quotaflow.sqlite enqueue --file examples/jobs.example.json

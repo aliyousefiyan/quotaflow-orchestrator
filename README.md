@@ -2,7 +2,7 @@
 
 **A safe, quota-aware controller for deterministic jobs across multiple GitHub Actions repository owners.** No paid service required for the controller, no external Python packages, and no dependence on Codex/Work for jobs already implemented as ordinary scripts.
 
-> v0.3.0 — verified pilot, not production trading software. Explicit GitHub workflow dispatch is supported; automatic unattended scheduling and live multi-owner deployment are **not** enabled. When billing data is unavailable or stale, private repo jobs are blocked. This is intentional.
+> v0.4.0 — Gmail alert routing preview (requires owner setup) — verified pilot, not production trading software. Explicit GitHub workflow dispatch is supported; automatic unattended scheduling and live multi-owner deployment are **not** enabled. When billing data is unavailable or stale, private repo jobs are blocked. This is intentional.
 
 [راهنمای فارسی](README.fa.md) · [Security](SECURITY.md) · [Architecture](docs/ARCHITECTURE.md) · [Activation approvals (FA)](docs/ACTIVATION_APPROVALS_FA.md) · [Activation approvals (EN)](docs/ACTIVATION_APPROVALS_EN.md)
 
@@ -54,6 +54,24 @@ The demo uses **unknown** budgets: no paid private workflow is dispatched. Repea
 A public repository can use its own short-lived, repository-scoped `GITHUB_TOKEN` to submit an allowlisted `workflow_dispatch` to **itself**, without creating a personal access token. This is an explicit opt-in via `github_actions_self_token: true` and it is accepted only when the runtime's GitHub Actions owner/repo matches the configured repository **and** GitHub verifies that repository is public and the target is the default branch. No cross-owner or private routing is allowed in this special mode.
 
 See [controller end-to-end smoke](.github/workflows/controller-queue-e2e.yml). This safety-scoped, one-shot workflow submits a synthetic job, not trading or market data, and uploads its local queue evidence. Three *private* owner workers still require independently authorized owner tokens and real remaining budget before billing-consuming dispatch; no automatic private fanout is enabled.
+
+## Gmail ×2 then Yahoo last: private alert bridge (v0.4 preview)
+
+[Persian setup](integrations/google_apps_script/README.fa.md) · [Apps Script code](integrations/google_apps_script/Code.gs) · [routing template](examples/routing.gmail-gmail-yahoo.example.json).
+
+An authorized Gmail owner can install a **15-minute Google Apps Script** that reads authentic, unambiguous GitHub Actions alerts for the two accounts sharing their Gmail. It posts a **signed pseudonymous hold/warn receipt to a PRIVATE GitHub issue**, not to this public repo. The controller independently fetches that issue (`alerts-sync-issue`) and validates HMAC before recording a monotonic SQLite hold. Routing uses first Gmail account → second Gmail account → Yahoo last; **Yahoo still needs fresh independently verified spendable budget and owner authorization**. A 75% alert warns; 85/90/100% holds new jobs. No mail can grant spending credits or automatically lift a hold.
+
+This routing mode **fails closed** unless the authorized private-issue feed was successfully checked in the past hour. It does not cancel running jobs and does not launch Work/Codex. Google Apps Script, Gmail permission, the private issue auth/HMAC settings and Yahoo quota confirmation are **not installed by the public release**.
+
+```bash
+python -m quotaflow --config accounts.json --budgets budgets.json --routing routing.json \
+  --state .quotaflow/queue.sqlite3 alerts-sync-issue \
+  --issue-repo MY_PRIVATE_OWNER/MY_PRIVATE_REPO --issue-number MY_PRIVATE_ISSUE
+python -m quotaflow --config accounts.json --budgets budgets.json --routing routing.json \
+  --state .quotaflow/queue.sqlite3 plan
+```
+
+Requires `QF_ISSUE_READ_TOKEN` and `QF_ALERT_HMAC_SECRET` in the operator's private environment. Issue read-only token must not be public. No private dispatch can occur without approved preflight and `--approve-dispatch`.
 
 ## Shared Work/Codex usage control
 
