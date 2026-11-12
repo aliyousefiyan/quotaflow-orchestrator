@@ -19,6 +19,7 @@ class EmailAlertRoutingTests(unittest.TestCase):
         self.tmp=tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.db=QueueDB(Path(self.tmp.name)/"q.sqlite3")
+        self.db.mark_alert_source_checked()
         self.addCleanup(self.db.close)
         self.accounts={}
         for id in ("gmail_a","gmail_b","yahoo"):
@@ -42,6 +43,12 @@ class EmailAlertRoutingTests(unittest.TestCase):
         f=Path(self.tmp.name)/"alert.json"
         f.write_text(json.dumps(event),encoding="utf-8")
         return ingest_verified_alert(self.db,load_alert(f),self.accounts)
+
+    def test_email_feed_missing_blocks_all_routed_private_accounts(self):
+        self.db.conn.execute("DELETE FROM quota_source_health")
+        chosen,reasons=choose(self.job,self.accounts,self.budgets,self.db,self.priority)
+        self.assertIsNone(chosen)
+        self.assertTrue(all(reason=="email_alert_feed_missing_or_stale" for _,reason in reasons))
 
     def test_prioritize_gmail_a_despite_more_balance_on_b(self):
         self.budgets["gmail_b"]["remaining_usd"]=20
