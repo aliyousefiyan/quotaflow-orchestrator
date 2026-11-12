@@ -41,3 +41,8 @@ python -m quotaflow --config examples/accounts.example.json --budgets examples/b
 ## طرح دو حساب Gmail و Yahoo به‌عنوان ذخیره آخر
 
 ماژول هشدار نسخه 0.4 با نگاشت دقیق دو حساب در یک Gmail، دریافت رویداد HMAC از Issue خصوصی، ذخیره توقف حساب در SQLite، انتخاب اولویت حساب اول → دوم → Yahoo و کنترل بودجه جدید ساخته شده است. **نصب Google Apps Script و صدور مجوزهای خصوصی هنوز نیازمند اقدام صاحب حساب است.** دستور کامل و امن در [راهنمای فارسی Gmail](integrations/google_apps_script/README.fa.md) آمده است. با نبود تأیید سلامت منبع ایمیل در ۶۰ دقیقه اخیر، مسیر خصوصی خودکار مسدود می‌شود.
+
+
+### نکته امنیتی Google Apps Script
+
+نسخه Gmail کم‌دسترسی از `gmail.readonly` استفاده می‌کند و در دو فایل مستقل [Code.gs](integrations/google_apps_script/Code.gs) و [appsscript.json](integrations/google_apps_script/appsscript.json) ارائه می‌شود. باید هر دو را در پروژه Google تنظیم کنید؛ کد قبلی GmailApp درخواست دسترسی کامل به ایمیل داشت و **نباید** مجوز آن را تأیید کرد.
