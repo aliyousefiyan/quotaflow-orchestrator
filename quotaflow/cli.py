@@ -15,6 +15,7 @@ def main(argv=None):
     p.add_argument("--config",default="accounts.json")
     p.add_argument("--budgets",default="budgets.json")
     p.add_argument("--state",default=".quotaflow/queue.sqlite3")
+    p.add_argument("--routing",default=None,help="Optional exact priority order; Yahoo always last")
     sub=p.add_subparsers(dest="command",required=True)
     enq=sub.add_parser("enqueue",help="Add immutable job definitions from JSON")
     enq.add_argument("--file",required=True)
@@ -24,6 +25,12 @@ def main(argv=None):
     sub.add_parser("sync",help="Read-only remote run reconciliation")
     sub.add_parser("doctor",help="Verify remote ownership and worker contracts (read-only)")
     sub.add_parser("billing-probe",help="Try read-only billing endpoint without auto-granting quota")
+    alert=sub.add_parser("alert-ingest",help="Persist a reviewed, verified-owner alert; cannot grant capacity")
+    alert.add_argument("--event",required=True,help="Locally reviewed Apps Script JSON alert")
+    sub.add_parser("alerts-status",help="Show owner holds and budget state, no network")
+    reset=sub.add_parser("alerts-reset",help="Manually clear hold after fresh budget/period verification")
+    reset.add_argument("--owner",required=True)
+    reset.add_argument("--confirm-new-period",action="store_true")
     sub.add_parser("codex-limits",help="Read Codex rate windows via official local app-server (no model turn)")
     ai=sub.add_parser("ai-plan",help="Plan Work and Codex tasks against shared manually attested credits")
     ai.add_argument("--ai-tasks",required=True)
@@ -48,15 +55,32 @@ def main(argv=None):
         accounts=load_accounts(args.config)
         budgets=load_budgets(args.budgets)
         db=QueueDB(args.state)
-        if args.command=="enqueue":
+        from .alerts import load_routing, load_alert, ingest_verified_alert, preview_routing
+        routing=load_routing(args.routing,accounts) if args.routing else None
+        if args.command=="alert-ingest":
+            record=load_alert(args.event)
+            value={"owner_id":record["owner_id"],"outcome":ingest_verified_alert(db,record,accounts)}
+        elif args.command=="alerts-status":
+            value=preview_routing(db,accounts,budgets,routing or tuple(accounts))
+        elif args.command=="alerts-reset":
+            quota=budgets.get(args.owner)
+            if args.owner not in accounts or not quota or quota.get("remaining_usd") is None:
+                raise ConfigError("Owner or verified spendable budget is unknown")
+            from .scheduler import budget_fresh
+            if not budget_fresh(quota) or quota["remaining_usd"]<=accounts[args.owner].minimum_reserve_usd:
+                raise ConfigError("Fresh, positive spendable budget beyond reserve is mandatory")
+            db.acknowledge_new_period(args.owner,observed_at=quota["as_of_utc"],
+                verified_budget_available=True,approved=args.confirm_new_period)
+            value={"owner_id":args.owner,"status":"cleared_by_explicit_manual_verification"}
+        elif args.command=="enqueue":
             raw=json.loads(Path(args.file).read_text(encoding="utf-8"))
             if not isinstance(raw,list):
                 raise ConfigError("Job definitions must be a JSON list")
             value=[{"id":j.id,"status":db.add(j)} for j in (Job.parse(v) for v in raw)]
         elif args.command=="plan":
-            value=plan(db,accounts,budgets)
+            value=plan(db,accounts,budgets,routing)
         elif args.command=="dispatch":
-            value=dispatch_one(db,accounts,budgets,approved=args.approve_dispatch)
+            value=dispatch_one(db,accounts,budgets,approved=args.approve_dispatch,routing_priority=routing)
         elif args.command=="sync":
             value=sync(db,accounts)
         elif args.command in ("doctor","billing-probe"):
