@@ -6,5 +6,18 @@
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/script.external_request",
     "https://www.googleapis.com/auth/script.scriptapp"
+  ],
+  "dependencies": {
+    "enabledAdvancedServices": [
+      {
+        "userSymbol": "Gmail",
+        "serviceId": "gmail",
+        "version": "v1"
+      }
+    ]
+  },
+  "urlFetchWhitelist": [
+    "https://gmail.googleapis.com/gmail/v1/users/me/messages",
+    "https://api.github.com/repos/"
   ]
 }
