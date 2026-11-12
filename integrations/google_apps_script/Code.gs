@@ -1,5 +1,5 @@
 /**
- * QuotaFlow Gmail watcher — OAuth Gmail API READ-ONLY, never GmailApp.
+ * QuotaFlow Gmail watcher — OAuth Gmail API READ-ONLY; no full-access mail service.
  * Requires EXACT manifest scopes: gmail.readonly + script.external_request + script.scriptapp.
  * It cannot send, modify or delete messages with this OAuth token.
  * It never runs a GitHub workflow; it only writes signed, hold-only notices
@@ -101,7 +101,7 @@ function qfComment_(cfg,event) {
 /**
  * Gmail REST API integration with a scope-limited Apps Script OAuth token.
  * API path is always under users/me/messages and methods are GET only.
- * GmailApp is intentionally never referenced (it requires full-mail scope).
+ * The full-access built-in mail service is intentionally not invoked.
  */
 function qfGmailApi_(suffix) {
   if(typeof suffix!=="string" || !/^(\?|\/[A-Za-z0-9_-]{1,200}\?format=full$)/.test(suffix))
