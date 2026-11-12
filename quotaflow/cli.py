@@ -29,6 +29,10 @@ def main(argv=None):
     alert.add_argument("--event",required=True,help="Locally reviewed Apps Script JSON alert")
     comments=sub.add_parser("alerts-import-comments",help="Verify and ingest HMAC-signed private issue comment JSON")
     comments.add_argument("--comments",required=True,help="JSON list from authorized private issue API")
+    sync_alerts=sub.add_parser("alerts-sync-issue",help="Read signed alerts from permitted PRIVATE issue")
+    sync_alerts.add_argument("--issue-repo",required=True)
+    sync_alerts.add_argument("--issue-number",type=int,required=True)
+    sync_alerts.add_argument("--token-env",default="QF_ISSUE_READ_TOKEN")
 
     sub.add_parser("alerts-status",help="Show owner holds and budget state, no network")
     reset=sub.add_parser("alerts-reset",help="Manually clear hold after fresh budget/period verification")
@@ -60,7 +64,17 @@ def main(argv=None):
         db=QueueDB(args.state)
         from .alerts import load_routing, load_alert, ingest_verified_alert, preview_routing
         routing=load_routing(args.routing,accounts) if args.routing else None
-        if args.command=="alerts-import-comments":
+        if args.command=="alerts-sync-issue":
+            import os
+            from .issue_alerts import import_issue_comments,fetch_private_issue_comments
+            key=os.environ.get("QF_ALERT_HMAC_SECRET","")
+            if len(key)<32:
+                raise ConfigError("No signing secret configured")
+            token=os.environ.get(args.token_env,"")
+            comments=fetch_private_issue_comments(
+                repository=args.issue_repo,issue_number=args.issue_number,token=token)
+            value=import_issue_comments(db,comments,key,accounts)
+        elif args.command=="alerts-import-comments":
             import os
             from .issue_alerts import import_issue_comments
             source=json.loads(Path(args.comments).read_text(encoding="utf-8"))
