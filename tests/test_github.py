@@ -21,7 +21,7 @@ def fake_api(login='alpha',public=False,valid=True,fail_dispatch=False):
         elif '/actions/workflows/worker.yml' in url:
             body={'name':'Worker','state':'active'}
         elif '/repos/alpha/worker' in url:
-            body={'full_name':'alpha/worker','owner':{'login':'alpha'},'archived':False,'private':not public}
+            body={'full_name':'alpha/worker','owner':{'login':'alpha'},'archived':False,'private':not public,'default_branch':'main'}
         else: raise AssertionError(url)
         return 200,json.dumps(body).encode()
     return fn,events
@@ -51,6 +51,26 @@ class GitHubTests(unittest.TestCase):
         self.assertIsNone(client.find_run('other'))
     def test_no_token(self):
         with self.assertRaisesRegex(GitHubError,'Missing token'): GitHub(Account.parse(A),environ={})
+    def test_repo_scoped_github_actions_self_token_valid_only_for_own_public_repo(self):
+        value={**A,'public_standard_runner':True,'github_actions_self_token':True}
+        env={'GH_ALPHA_TOKEN':'mock-secret','GITHUB_ACTIONS':'true','GITHUB_REPOSITORY':'alpha/worker','GITHUB_REPOSITORY_OWNER':'alpha'}
+        client=GitHub(Account.parse(value),transport=fake_api(public=True)[0],environ=env)
+        self.assertEqual(client.verify()['auth_mode'],'repo_scoped_actions_self')
+    def test_repo_scoped_token_rejects_forged_current_repository(self):
+        value={**A,'public_standard_runner':True,'github_actions_self_token':True}
+        env={'GH_ALPHA_TOKEN':'mock-secret','GITHUB_ACTIONS':'true','GITHUB_REPOSITORY':'some-other/repo','GITHUB_REPOSITORY_OWNER':'alpha'}
+        client=GitHub(Account.parse(value),transport=fake_api(public=True)[0],environ=env)
+        with self.assertRaises(GitHubError):client.verify()
+    def test_repo_scoped_token_rejects_private_repo(self):
+        value={**A,'public_standard_runner':True,'github_actions_self_token':True}
+        env={'GH_ALPHA_TOKEN':'mock-secret','GITHUB_ACTIONS':'true','GITHUB_REPOSITORY':'alpha/worker','GITHUB_REPOSITORY_OWNER':'alpha'}
+        client=GitHub(Account.parse(value),transport=fake_api(public=False)[0],environ=env)
+        with self.assertRaises(GitHubError):client.verify()
+    def test_repo_scoped_token_rejects_missing_github_actions_flag(self):
+        value={**A,'public_standard_runner':True,'github_actions_self_token':True}
+        env={'GH_ALPHA_TOKEN':'mock-secret','GITHUB_REPOSITORY':'alpha/worker','GITHUB_REPOSITORY_OWNER':'alpha'}
+        client=GitHub(Account.parse(value),transport=fake_api(public=True)[0],environ=env)
+        with self.assertRaises(GitHubError):client.verify()
     def test_public_contract_requires_verified_public_repo(self):
         value={**A,'public_standard_runner':True}
         client=GitHub(Account.parse(value),transport=fake_api(public=False)[0],environ={'GH_ALPHA_TOKEN':'x'})
