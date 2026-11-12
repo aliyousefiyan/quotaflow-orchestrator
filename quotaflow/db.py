@@ -167,7 +167,7 @@ class QueueDB:
                         threshold_pct=excluded.threshold_pct,event_id=excluded.event_id,
                         observed_at=excluded.observed_at""",(owner_id,action,threshold_pct,event_id,observed_at))
             self.conn.execute("COMMIT")
-            return action
+            return action if is_current_month else "archived_previous_month"
         except BaseException:
             self.conn.execute("ROLLBACK")
             raise
