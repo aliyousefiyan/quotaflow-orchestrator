@@ -15,6 +15,8 @@
 
 **هر دو فایل باید در پروژه Google Apps Script جایگزین شوند:**
 
+مانيفست جدید علاوه‌بر محدودکردن مجوزها، Gmail API را در سرویس‌های پیشرفته پروژه فعال می‌کند (برای پروژه پیش‌فرض Google Cloud) و اتصال خارجی را به آدرس‌های Gmail API و GitHub API محدود می‌کند. <https://developers.google.com/apps-script/guides/services/advanced>
+
 1. در Editor، **تمام کد قبلی `Code.gs`** را حذف و [نسخه به‌روز `Code.gs`](Code.gs) را کامل جایگزین و Save کنید. هیچ تابع قدیمی `GmailApp` نباید در پروژه باقی بماند.
 2. در **Project Settings** تیک `Show "appsscript.json" manifest file in editor` را فعال کنید.
 3. فایل `appsscript.json` در Editor نمایش داده می‌شود؛ مقدار `oauthScopes` را دقیقاً برابر [manifest محدودشده](appsscript.json) تنظیم کنید (یا اگر تنظیمات دیگری ندارید کل فایل نمونه را جایگزین کنید):
