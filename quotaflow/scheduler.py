@@ -17,6 +17,12 @@ def budget_fresh(item, now=None):
     except ConfigError:
         return False
     now = now or datetime.now(timezone.utc)
+    from .billing_period import same_billing_period
+    # A snapshot from the previous month is NOT fresh even if its time is
+    # only seconds old at midnight. The new included allowance has not been
+    # verified until a NEW current-month billing observation is recorded.
+    if not same_billing_period(observed,now):
+        return False
     elapsed=(now-observed).total_seconds()
     return -300 <= elapsed <= MAX_AGE_HOURS * 3600
 
