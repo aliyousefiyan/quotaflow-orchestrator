@@ -15,6 +15,14 @@ class ModelsTests(unittest.TestCase):
         with self.assertRaises(ConfigError): Account.parse({**A,"shell":"curl private"})
     def test_empty_profiles_rejected(self):
         with self.assertRaises(ConfigError): Account.parse({**A,"profiles":[]})
+    def test_self_repo_mode_forbids_private_budget_bypass(self):
+        with self.assertRaises(ConfigError):
+            Account.parse({**A,"github_actions_self_token":True})
+        with self.assertRaises(ConfigError):
+            Account.parse({**A,"github_actions_self_token":"true","public_standard_runner":True})
+    def test_self_repo_mode_explicit_public_only(self):
+        a=Account.parse({**A,"public_standard_runner":True,"github_actions_self_token":True})
+        self.assertTrue(a.github_actions_self_token)
     def test_good_job(self): self.assertEqual(Job.parse(J).profile,"unit")
     def test_unknown_job_field_rejected(self):
         with self.assertRaises(ConfigError): Job.parse({**J,"shell":"rm -rf /"})
