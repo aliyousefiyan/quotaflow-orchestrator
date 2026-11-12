@@ -74,6 +74,8 @@ def main(argv=None):
             comments=fetch_private_issue_comments(
                 repository=args.issue_repo,issue_number=args.issue_number,token=token)
             value=import_issue_comments(db,comments,key,accounts)
+            db.mark_alert_source_checked()
+            value["feed_fresh"]=True
         elif args.command=="alerts-import-comments":
             import os
             from .issue_alerts import import_issue_comments
