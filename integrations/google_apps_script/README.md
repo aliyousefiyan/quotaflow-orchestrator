@@ -11,3 +11,7 @@ The controller command `alerts-sync-issue` reads the private issue through a lim
 GitHub's officially documented included-usage email alerts generally occur at 90% and 100%, and configured budget alerts at 75%, 90%, and 100%; 85% is a custom internal protective threshold, not a promise about GitHub email content. If parsing is ambiguous, fail closed and request manual review.
 
 **Not activated:** Gmail OAuth, Script Properties, private HMAC secret, private issue integration, and three owner billing records require operator setup. Nothing is deployed merely by publishing these files.
+
+## Real GitHub 100% included Actions minutes email
+
+The subject `[GitHub] You have used 100% of the Actions minutes included for the aliyousefiyan account` is tested and maps only to the exact configured first Gmail owner, at threshold 100, **provided sender and GitHub DKIM are valid**. The production poll remains at seven days. To investigate older messages, run `diagnoseQuotaFlowAlerts` manually with `QF_DRY_RUN=true`: it performs a separate **read-only 90-day, max-60-message Gmail subject search** and prints only aggregate non-sensitive diagnostic reason counts, not body, account, sender or credentials. This diagnostic never imports old alerts or sends GitHub receipts. Do not relax sender or DKIM verification to increase detection rates.

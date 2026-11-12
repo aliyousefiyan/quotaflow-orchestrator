@@ -84,6 +84,51 @@ function qfParse_(msg,owners) {
           owner_id:owner,product:"github_actions",threshold_pct:percents[0],
           observed_at_utc:msg.getDate().toISOString(),owner_identity_verified:true};
 }
+/**
+ * Safe reject-reason categories for local investigation. Never log subject,
+ * sender address, headers, body, message ID or actual GitHub login.
+ * This is only a diagnosis; no security check is bypassed.
+ */
+function qfDiagnosticReason_(msg,owners) {
+  if(qfSender_(msg.getFrom())!=="github.com") return "sender_domain_unverified";
+  if(!String(msg.getHeader("Authentication-Results")||""))
+    return "authentication_header_missing";
+  if(!qfAuthenticated_(msg)) return "github_dkim_unverified";
+  const subject=String(msg.getSubject()||"");
+  const body=String(msg.getPlainBody()||"").slice(0,18000);
+  const text=subject+"\n"+body;
+  if(/\b(storage|artifact storage|registry|packages|codespaces|copilot)\b/i.test(subject))
+    return "unrelated_billing_product";
+  if(!/github\s+actions?\b|\bactions?\s+(minutes|compute|usage|billing|budget)\b/i.test(text))
+    return "actions_not_mentioned";
+  if(!/\b(used|usage|included|budget|reached|exceeded|threshold|consumed|spend|spent)\b/i.test(text))
+    return "no_usage_language";
+  const subj=[...subject.matchAll(/\b(75|85|90|100)\s*%/g)].map(m=>Number(m[1]));
+  const rest=[...body.matchAll(/(?:used|reached|exceeded|consumed|at)\s+(?:approximately\s+)?(75|85|90|100)\s*%/ig)].map(m=>Number(m[1]));
+  if([...new Set(subj.length?subj:rest)].length!==1) return "threshold_missing_or_ambiguous";
+  if(!qfOwner_(text,owners)) return "account_missing_or_ambiguous";
+  return "recognized_candidate";
+}
+
+/**
+ * Run manually ONLY with QF_DRY_RUN=true. Search historic subject patterns
+ * up to 90 days to explain why 7-day polling may not find an older alert.
+ * No email details, logins, content or secrets are printed. NO GitHub writes.
+ */
+function diagnoseQuotaFlowAlerts() {
+  const cfg=qfProperties_();
+  if(!cfg.dryRun) throw new Error("Historical diagnostics forbidden outside dry run");
+  const ids=qfListMessageIds_(true);
+  const reasons={};
+  for(const id of ids) {
+    const msg=qfMessageFromApi_(qfGmailApi_("/"+encodeURIComponent(id)+"?format=full"));
+    const reason=qfDiagnosticReason_(msg,cfg.owners);
+    reasons[reason]=(reasons[reason]||0)+1;
+  }
+  console.log(JSON.stringify({mode:"historic_readonly",lookback_days:90,
+      scanned:ids.length,reason_counts:reasons,no_remote_writes:true}));
+}
+
 function qfComment_(cfg,event) {
   const payload={...event,signature:qfHmac_(event,cfg.QF_HMAC_SECRET)};
   const endpoint="https://api.github.com/repos/"+cfg.QF_PRIVATE_REPO+"/issues/"+
@@ -105,8 +150,9 @@ function qfComment_(cfg,event) {
  */
 function qfGmailApi_(suffix) {
   const allowedList="?maxResults=60&q="+encodeURIComponent("from:(github.com) newer_than:7d");
+  const allowedHistorical="?maxResults=60&q="+encodeURIComponent('from:(github.com) subject:"Actions minutes" newer_than:90d');
   if(typeof suffix!=="string" ||
-     !(suffix===allowedList || /^\/[A-Za-z0-9_-]{1,200}\?format=full$/.test(suffix)))
+     !(suffix===allowedList || suffix===allowedHistorical || /^\/[A-Za-z0-9_-]{1,200}\?format=full$/.test(suffix)))
     throw new Error("Unsafe Gmail API resource path");
   const url="https://gmail.googleapis.com/gmail/v1/users/me/messages"+suffix;
   const response=UrlFetchApp.fetch(url,{
@@ -120,9 +166,11 @@ function qfGmailApi_(suffix) {
     throw new Error("Invalid Gmail API JSON response");
   return raw;
 }
-function qfListMessageIds_() {
-  // One bounded page per polling cycle; no content or private addresses in logs.
-  const q=encodeURIComponent("from:(github.com) newer_than:7d");
+function qfListMessageIds_(historicalReadOnly) {
+  // Historical diagnostics NEVER send receipts or update the processed ledger.
+  const q=encodeURIComponent(historicalReadOnly
+      ? 'from:(github.com) subject:"Actions minutes" newer_than:90d'
+      : "from:(github.com) newer_than:7d");
   const response=qfGmailApi_("?maxResults=60&q="+q);
   if(response.nextPageToken)
     throw new Error("Gmail result exceeds safe 60-message window; manual review");
