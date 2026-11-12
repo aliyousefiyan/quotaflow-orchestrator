@@ -2,7 +2,7 @@
 
 **A safe, quota-aware controller for deterministic jobs across multiple GitHub Actions repository owners.** No paid service required for the controller, no external Python packages, and no dependence on Codex/Work for jobs already implemented as ordinary scripts.
 
-> v0.2.0 — verified pilot, not production trading software. Explicit GitHub workflow dispatch is supported; automatic unattended scheduling and live multi-owner deployment are **not** enabled. When billing data is unavailable or stale, private repo jobs are blocked. This is intentional.
+> v0.3.0 — verified pilot, not production trading software. Explicit GitHub workflow dispatch is supported; automatic unattended scheduling and live multi-owner deployment are **not** enabled. When billing data is unavailable or stale, private repo jobs are blocked. This is intentional.
 
 [راهنمای فارسی](README.fa.md) · [Security](SECURITY.md) · [Architecture](docs/ARCHITECTURE.md)
 
@@ -22,7 +22,7 @@
 5. Maximum **one active run per owner**, **one dispatch per CLI invocation**, and no network writes without `--approve-dispatch`.
 6. Fail-closed ambiguous network responses: no automatic duplicate dispatches after timeouts. Separate read-only `sync` recovers remote run state when possible.
 7. Read-only `doctor` and `billing-probe`; no credential echo, shell injection or trading endpoints.
-8. Copyable owner-side GitHub Actions worker example with only two *static* no-trading recipes; 45 automated unit tests.
+8. Copyable owner-side GitHub Actions worker example with only two *static* no-trading recipes; 51 automated unit tests.
 9. Official **read-only local Codex rate-window probe** via app-server; shared Work/Codex allowance planner with 30% reserve and manual approval gate.
 
 ## Install and offline demonstration
@@ -48,6 +48,12 @@ The demo uses **unknown** budgets: no paid private workflow is dispatched. Repea
 7. Enqueue a task with a genuinely derived input SHA256; run `plan`, then explicitly `dispatch --approve-dispatch` to start **at most one** eligible workflow. After GitHub accepts, run `sync` to verify completion. Save artifacts in each worker repository's Actions run.
 
 > `dispatch --approve-dispatch` is intentionally opt-in and **may incur GitHub costs** if the repo is private. The repository's owner must review allowance and spending settings first. GitHub's billing API can deny access even with valid repo credentials; the system does not guess.
+
+## Verified GitHub Actions built-in token: public same-repository controller
+
+A public repository can use its own short-lived, repository-scoped `GITHUB_TOKEN` to submit an allowlisted `workflow_dispatch` to **itself**, without creating a personal access token. This is an explicit opt-in via `github_actions_self_token: true` and it is accepted only when the runtime's GitHub Actions owner/repo matches the configured repository **and** GitHub verifies that repository is public and the target is the default branch. No cross-owner or private routing is allowed in this special mode.
+
+See [controller end-to-end smoke](.github/workflows/controller-queue-e2e.yml). This safety-scoped, one-shot workflow submits a synthetic job, not trading or market data, and uploads its local queue evidence. Three *private* owner workers still require independently authorized owner tokens and real remaining budget before billing-consuming dispatch; no automatic private fanout is enabled.
 
 ## Shared Work/Codex usage control
 
