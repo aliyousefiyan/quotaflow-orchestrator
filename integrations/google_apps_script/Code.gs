@@ -31,8 +31,8 @@ function qfProperties_() {
     if(!/^[A-Za-z0-9_.-]{1,64}$/.test(name)||!/^[A-Za-z0-9_.-]{1,64}$/.test(alias))
       throw new Error("Unsafe owner alias");
   }
-  if(!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(cfg.QF_PRIVATE_REPO)||
-     !/^[1-9]\d*$/.test(cfg.QF_ISSUE_NUMBER)) throw new Error("Unsafe private issue locator");
+  if(!cfg.dryRun&&(!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(cfg.QF_PRIVATE_REPO)||
+     !/^[1-9]\d*$/.test(cfg.QF_ISSUE_NUMBER))) throw new Error("Unsafe private issue locator");
   return cfg;
 }
 function qfHex_(bytes) {
