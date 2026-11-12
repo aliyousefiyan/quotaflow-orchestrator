@@ -49,10 +49,11 @@ class Account:
     profiles: tuple[str, ...]
     minimum_reserve_usd: float = 0.25
     public_standard_runner: bool = False
+    github_actions_self_token: bool = False
 
     @classmethod
     def parse(cls, value):
-        exact_fields(value, {"id", "owner", "repository", "workflow", "ref", "token_env", "profiles"}, {"minimum_reserve_usd", "public_standard_runner"})
+        exact_fields(value, {"id", "owner", "repository", "workflow", "ref", "token_env", "profiles"}, {"minimum_reserve_usd", "public_standard_runner", "github_actions_self_token"})
         for key in ("id", "owner"):
             if not isinstance(value[key], str) or not NAME.fullmatch(value[key]):
                 raise ConfigError(f"Invalid {key}")
@@ -69,7 +70,11 @@ class Account:
             raise ConfigError("Profiles must be a nonempty unique allowlist")
         if type(value.get("public_standard_runner", False)) is not bool:
             raise ConfigError("Invalid public runner flag")
-        return cls(value["id"], value["owner"], value["repository"], value["workflow"], value["ref"], value["token_env"], tuple(profiles), number(value.get("minimum_reserve_usd", .25)), value.get("public_standard_runner", False))
+        if type(value.get("github_actions_self_token", False)) is not bool:
+            raise ConfigError("Invalid GitHub Actions self-token flag")
+        if value.get("github_actions_self_token", False) and not value.get("public_standard_runner", False):
+            raise ConfigError("GitHub Actions self token is permitted only for verified public standard runners")
+        return cls(value["id"], value["owner"], value["repository"], value["workflow"], value["ref"], value["token_env"], tuple(profiles), number(value.get("minimum_reserve_usd", .25)), value.get("public_standard_runner", False), value.get("github_actions_self_token", False))
 
 
 @dataclass(frozen=True)
