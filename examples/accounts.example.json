@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "accounts": [
+    {"id": "owner_a", "owner": "account-one", "repository": "account-one/quotaflow-worker", "workflow": "quotaflow-worker.yml", "ref": "main", "token_env": "QF_TOKEN_OWNER_A", "profiles": ["smoke", "sample_compute"], "minimum_reserve_usd": 0.5},
+    {"id": "owner_b", "owner": "account-two", "repository": "account-two/quotaflow-worker", "workflow": "quotaflow-worker.yml", "ref": "main", "token_env": "QF_TOKEN_OWNER_B", "profiles": ["smoke", "sample_compute"], "minimum_reserve_usd": 0.5},
+    {"id": "owner_c", "owner": "account-three", "repository": "account-three/quotaflow-worker", "workflow": "quotaflow-worker.yml", "ref": "main", "token_env": "QF_TOKEN_OWNER_C", "profiles": ["smoke", "sample_compute"], "minimum_reserve_usd": 0.5}
+  ]
+}

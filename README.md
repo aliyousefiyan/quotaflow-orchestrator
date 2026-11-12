@@ -1,0 +1,66 @@
+# QuotaFlow Orchestrator
+
+**A safe, quota-aware controller for deterministic jobs across multiple GitHub Actions repository owners.** No paid service required for the controller, no external Python packages, and no dependence on Codex/Work for jobs already implemented as ordinary scripts.
+
+> v0.1.0 — verified pilot, not production trading software. Explicit GitHub workflow dispatch is supported; automatic unattended scheduling and live multi-owner deployment are **not** enabled. When billing data is unavailable or stale, private repo jobs are blocked. This is intentional.
+
+[راهنمای فارسی](README.fa.md) · [Security](SECURITY.md) · [Architecture](docs/ARCHITECTURE.md)
+
+## Why this exists
+
+- **Three GitHub accounts are not one shared quota**: GitHub Actions costs are billed to the **repository owner**, not the triggerer. To draw from separate included allowances, use distinct approved worker repositories owned by each respective account. Never evade platform conditions or abuse accounts.
+- Public repositories with **standard GitHub-hosted runners** generally have free job compute, subject to GitHub policies, abuse limits, storage, concurrency and other constraints. Private repositories use the respective owner's current included allowance and billing rules (which GitHub may express as money or minutes).
+- ChatGPT **Work and Codex share a separate OpenAI allowance** in eligible plans. GitHub Actions execution does not itself debit Work/Codex credits, but **calling AI inside workflows does** if you configure a paid API. This project makes no paid AI API calls.
+- Desktop Commander has its own limits. It is not required for the main runtime.
+
+## Features shipped
+
+1. Strict JSON configuration (no tokens in files; only secret environment-variable names).
+2. Durable, idempotent SQLite queue and immutable jobs.
+3. Cross-owner routing by validated account identity, owner-controlled repository, allowlisted worker and profiled job type.
+4. Conservative budget plans per account (staleness cap 12 h, extra reserve, tracked dispatch commitments). No fake quotas or silently inferred allowances.
+5. Maximum **one active run per owner**, **one dispatch per CLI invocation**, and no network writes without `--approve-dispatch`.
+6. Fail-closed ambiguous network responses: no automatic duplicate dispatches after timeouts. Separate read-only `sync` recovers remote run state when possible.
+7. Read-only `doctor` and `billing-probe`; no credential echo, shell injection or trading endpoints.
+8. Copyable owner-side GitHub Actions worker example with only two *static* no-trading recipes; 35+ automated unit tests.
+
+## Install and offline demonstration
+
+Requirements: Python 3.10+ and GitHub account(s) with permission to run Actions. **No API keys required to test locally.**
+
+```bash
+python -m unittest discover -s tests -t . -v
+python -m quotaflow --config examples/accounts.example.json --budgets examples/budgets.unknown.json --state /tmp/qf-demo.sqlite3 enqueue --file examples/jobs.example.json
+python -m quotaflow --config examples/accounts.example.json --budgets examples/budgets.unknown.json --state /tmp/qf-demo.sqlite3 plan
+```
+
+The demo uses **unknown** budgets: no paid private workflow is dispatched. Repeat enqueue to see idempotence.
+
+## How to connect three independent owners
+
+1. Create a dedicated **worker repository owned by each account**. Do not point three tokens at one repository and expect separate billing. Keep private research or trading data in its authorized owner's repository only.
+2. Copy `templates/worker.yml` to `.github/workflows/quotaflow-worker.yml` in each worker repository's **default branch**. Review and approve a worker-specific recipe before adding any real backtesting code. Avoid arbitrary shell command inputs.
+3. Copy `examples/accounts.example.json` to `accounts.json` and edit owner/repository/allowlisted profiles. Keep this file private if it describes private infrastructure; the example is public only.
+4. Provide credentials via environment variables `QF_TOKEN_OWNER_A`, `QF_TOKEN_OWNER_B`, `QF_TOKEN_OWNER_C`. Each account's token must resolve via `/user` to that configured **owner** and be authorized to read the repo and dispatch workflows. Never paste secrets into chat or GitHub code/issue content. Tokens are **not** stored by the queue.
+5. Copy `examples/budgets.unknown.json` to `budgets.json`. Enter **real verified, recent, spendable** remaining USD values per owner (or set up a verified billing adapter). Do not convert old included minutes into money without checking the current plan/rate. Unknown values stay null. Budget samples are not actual allowances.
+6. Test read-only: `python -m quotaflow --config accounts.json --budgets budgets.json doctor`.
+7. Enqueue a task with a genuinely derived input SHA256; run `plan`, then explicitly `dispatch --approve-dispatch` to start **at most one** eligible workflow. After GitHub accepts, run `sync` to verify completion. Save artifacts in each worker repository's Actions run.
+
+> `dispatch --approve-dispatch` is intentionally opt-in and **may incur GitHub costs** if the repo is private. The repository's owner must review allowance and spending settings first. GitHub's billing API can deny access even with valid repo credentials; the system does not guess.
+
+## Explicit limitations
+
+- **No automatic reading of ChatGPT Work/Codex allowance**. On personal plans, use available ChatGPT/Codex usage dashboards or `/status`; there is no supported generic account API in this project. Work/Codex quota is a separate advisory/manual decision and is not inferred from GitHub Actions.
+- The GitHub connector may not expose billing permissions; the optional `billing-probe` will report access failure and leave usable quota unknown.
+- No automated quota discovery when auth/plan is unsupported; no deployment to any user's machine/server, no auto-run scheduler, no self-hosted runner or arbitrarily timed background work in this release.
+- No unified risk pool for trading; no Binance keys, no order/router actions, no strategy generation, and no private model data.
+- GitHub Dispatch API may acknowledge a run before it appears in the Actions listing. The worker run-name includes the job ID so `sync` can correlate a later record. Unmatched/ambiguous cases must be investigated, never retried blindly.
+
+## GitHub and OpenAI documentation
+
+- [GitHub Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions)
+- [GitHub REST billing usage](https://docs.github.com/en/rest/billing/usage)
+- [GitHub workflow dispatch](https://docs.github.com/en/rest/actions/workflows#create-a-workflow-dispatch-event)
+- [Codex usage](https://help.openai.com/en/articles/11369540-using-codex-with-your-chatgpt-plan)
+
+License: MIT. Contributions and security reviews welcome.

@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.env
+.quotaflow/
+accounts.json
+budgets.json
+*.sqlite3
+*.sqlite3-*
+secret*
+*.pem
+*.key

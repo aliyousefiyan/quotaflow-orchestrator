@@ -1,0 +1,4 @@
+[
+  {"id": "demo-smoke-001", "project": "demo", "profile": "smoke", "estimated_usd": 0.03, "priority": 1, "target_accounts": ["owner_a", "owner_b", "owner_c"], "inputs_digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"},
+  {"id": "demo-compute-002", "project": "demo", "profile": "sample_compute", "estimated_usd": 0.08, "priority": 2, "target_accounts": ["owner_a", "owner_b", "owner_c"], "inputs_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"}
+]

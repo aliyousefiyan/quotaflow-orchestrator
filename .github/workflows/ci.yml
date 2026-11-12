@@ -1,0 +1,32 @@
+name: Unit tests and offline pilot
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'quotaflow/**'
+      - 'tests/**'
+      - 'examples/**'
+      - 'templates/**'
+      - 'pyproject.toml'
+      - '.github/workflows/ci.yml'
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -t . -v
+      - name: Check syntax
+        run: python -m compileall -q quotaflow
+      - name: Offline simulation
+        run: |
+          python -m quotaflow --config examples/accounts.example.json --budgets examples/budgets.unknown.json --state /tmp/quotaflow.sqlite enqueue --file examples/jobs.example.json
+          python -m quotaflow --config examples/accounts.example.json --budgets examples/budgets.unknown.json --state /tmp/quotaflow.sqlite plan

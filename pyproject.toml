@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=65"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quotaflow-orchestrator"
+version = "0.1.0"
+description = "Quota-aware, fail-closed GitHub Actions job orchestrator and offline deterministic work queue"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{name="QuotaFlow contributors"}]
+keywords = ["github-actions", "workflows", "queue", "quotas", "automation"]
+
+[project.scripts]
+quotaflow = "quotaflow.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["quotaflow*"]
