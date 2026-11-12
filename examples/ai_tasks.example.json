@@ -1,0 +1,16 @@
+[
+  {
+    "id": "ema-safety-review",
+    "project": "EMA",
+    "surface": "codex",
+    "estimated_pct": 10,
+    "description": "Review immutable, test-only change with source hash and no trading deployment."
+  },
+  {
+    "id": "report-architecture",
+    "project": "Infrastructure",
+    "surface": "work",
+    "estimated_pct": 15,
+    "description": "Write technical architecture brief from reviewed public repository."
+  }
+]
