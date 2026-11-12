@@ -104,7 +104,9 @@ function qfComment_(cfg,event) {
  * The full-access built-in mail service is intentionally not invoked.
  */
 function qfGmailApi_(suffix) {
-  if(typeof suffix!=="string" || !/^(\?|\/[A-Za-z0-9_-]{1,200}\?format=full$)/.test(suffix))
+  const allowedList="?maxResults=60&q="+encodeURIComponent("from:(github.com) newer_than:7d");
+  if(typeof suffix!=="string" ||
+     !(suffix===allowedList || /^\/[A-Za-z0-9_-]{1,200}\?format=full$/.test(suffix)))
     throw new Error("Unsafe Gmail API resource path");
   const url="https://gmail.googleapis.com/gmail/v1/users/me/messages"+suffix;
   const response=UrlFetchApp.fetch(url,{
