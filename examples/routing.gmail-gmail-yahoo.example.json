@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "priority": [
+    "owner_a",
+    "owner_b",
+    "owner_c"
+  ],
+  "yahoo_backup": "owner_c",
+  "yahoo_last": true
+}
