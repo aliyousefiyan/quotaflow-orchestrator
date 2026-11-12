@@ -121,6 +121,7 @@ class ProjectHomeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             db=QueueDB(Path(d)/"queue.sqlite3")
             self.addCleanup(db.close)
+            db.mark_alert_source_checked()
             now=datetime.now(timezone.utc).isoformat()
             budgets={x:{"remaining_usd":100,"as_of_utc":now,"source":"manual"} for x in self.accounts}
             job=self.job()
