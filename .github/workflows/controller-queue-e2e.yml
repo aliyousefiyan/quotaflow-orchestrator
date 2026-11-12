@@ -1,0 +1,66 @@
+# Runs once when introduced on main; future runs are manual only.
+# All jobs use public synthetic smoke data; no trading and no private repos.
+name: QuotaFlow controller-to-worker end-to-end
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/controller-queue-e2e.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: write
+jobs:
+  controller-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Prepare ephemeral owner-scoped account and deterministic smoke job
+        env:
+          REPOSITORY: ${{ github.repository }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          python - <<'PY'
+          import hashlib,json,os,pathlib
+          repo=os.environ['REPOSITORY']
+          owner=os.environ['REPOSITORY_OWNER']
+          job_id='controller-'+os.environ['RUN_ID']
+          root=pathlib.Path('qf-run')
+          root.mkdir(exist_ok=True)
+          account={'schema':1,'accounts':[{'id':'public_self','owner':owner,'repository':repo,
+              'workflow':'quotaflow-worker.yml','ref':'main','token_env':'QF_TOKEN_GITHUB_SELF',
+              'profiles':['smoke'],'minimum_reserve_usd':0,
+              'public_standard_runner':True,'github_actions_self_token':True}]}
+          budget={'schema':1,'accounts':{'public_self':{'as_of_utc':None,
+              'source':'manual','remaining_usd':None}}}
+          payload=[{'id':job_id,'project':'QuotaFlow','profile':'smoke',
+              'estimated_usd':0,'priority':0,'target_accounts':['public_self'],
+              'inputs_digest':hashlib.sha256(b'quotaflow public self job v0.3').hexdigest()}]
+          for name,obj in (('accounts.json',account),('budgets.json',budget),('job.json',payload)):
+              (root/name).write_text(json.dumps(obj))
+          PY
+      - name: Validate identity and signed workflow contract, enqueue and dispatch one smoke
+        env:
+          QF_TOKEN_GITHUB_SELF: ${{ github.token }}
+        run: |
+          python -m quotaflow --config qf-run/accounts.json --budgets qf-run/budgets.json --state qf-run/queue.sqlite3 doctor
+          python -m quotaflow --config qf-run/accounts.json --budgets qf-run/budgets.json --state qf-run/queue.sqlite3 enqueue --file qf-run/job.json
+          python -m quotaflow --config qf-run/accounts.json --budgets qf-run/budgets.json --state qf-run/queue.sqlite3 plan
+          python -m quotaflow --config qf-run/accounts.json --budgets qf-run/budgets.json --state qf-run/queue.sqlite3 dispatch --approve-dispatch
+          sleep 5
+          python -m quotaflow --config qf-run/accounts.json --budgets qf-run/budgets.json --state qf-run/queue.sqlite3 sync
+      - name: Retain non-secret SQLite queue and job definitions
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quotaflow-controller-receipt-${{ github.run_id }}
+          path: |
+            qf-run/queue.sqlite3
+            qf-run/job.json
+          retention-days: 7
+          if-no-files-found: warn
