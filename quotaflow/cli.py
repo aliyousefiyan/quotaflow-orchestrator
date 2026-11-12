@@ -27,6 +27,9 @@ def main(argv=None):
     sub.add_parser("billing-probe",help="Try read-only billing endpoint without auto-granting quota")
     alert=sub.add_parser("alert-ingest",help="Persist a reviewed, verified-owner alert; cannot grant capacity")
     alert.add_argument("--event",required=True,help="Locally reviewed Apps Script JSON alert")
+    comments=sub.add_parser("alerts-import-comments",help="Verify and ingest HMAC-signed private issue comment JSON")
+    comments.add_argument("--comments",required=True,help="JSON list from authorized private issue API")
+
     sub.add_parser("alerts-status",help="Show owner holds and budget state, no network")
     reset=sub.add_parser("alerts-reset",help="Manually clear hold after fresh budget/period verification")
     reset.add_argument("--owner",required=True)
@@ -57,7 +60,13 @@ def main(argv=None):
         db=QueueDB(args.state)
         from .alerts import load_routing, load_alert, ingest_verified_alert, preview_routing
         routing=load_routing(args.routing,accounts) if args.routing else None
-        if args.command=="alert-ingest":
+        if args.command=="alerts-import-comments":
+            import os
+            from .issue_alerts import import_issue_comments
+            source=json.loads(Path(args.comments).read_text(encoding="utf-8"))
+            key=os.environ.get("QF_ALERT_HMAC_SECRET","")
+            value=import_issue_comments(db,source,key,accounts)
+        elif args.command=="alert-ingest":
             record=load_alert(args.event)
             value={"owner_id":record["owner_id"],"outcome":ingest_verified_alert(db,record,accounts)}
         elif args.command=="alerts-status":
