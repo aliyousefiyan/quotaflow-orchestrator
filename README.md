@@ -2,7 +2,7 @@
 
 **A safe, quota-aware controller for deterministic jobs across multiple GitHub Actions repository owners.** No paid service required for the controller, no external Python packages, and no dependence on Codex/Work for jobs already implemented as ordinary scripts.
 
-> v0.1.0 — verified pilot, not production trading software. Explicit GitHub workflow dispatch is supported; automatic unattended scheduling and live multi-owner deployment are **not** enabled. When billing data is unavailable or stale, private repo jobs are blocked. This is intentional.
+> v0.2.0 — verified pilot, not production trading software. Explicit GitHub workflow dispatch is supported; automatic unattended scheduling and live multi-owner deployment are **not** enabled. When billing data is unavailable or stale, private repo jobs are blocked. This is intentional.
 
 [راهنمای فارسی](README.fa.md) · [Security](SECURITY.md) · [Architecture](docs/ARCHITECTURE.md)
 
@@ -22,7 +22,8 @@
 5. Maximum **one active run per owner**, **one dispatch per CLI invocation**, and no network writes without `--approve-dispatch`.
 6. Fail-closed ambiguous network responses: no automatic duplicate dispatches after timeouts. Separate read-only `sync` recovers remote run state when possible.
 7. Read-only `doctor` and `billing-probe`; no credential echo, shell injection or trading endpoints.
-8. Copyable owner-side GitHub Actions worker example with only two *static* no-trading recipes; 35+ automated unit tests.
+8. Copyable owner-side GitHub Actions worker example with only two *static* no-trading recipes; 45 automated unit tests.
+9. Official **read-only local Codex rate-window probe** via app-server; shared Work/Codex allowance planner with 30% reserve and manual approval gate.
 
 ## Install and offline demonstration
 
@@ -48,9 +49,18 @@ The demo uses **unknown** budgets: no paid private workflow is dispatched. Repea
 
 > `dispatch --approve-dispatch` is intentionally opt-in and **may incur GitHub costs** if the repo is private. The repository's owner must review allowance and spending settings first. GitHub's billing API can deny access even with valid repo credentials; the system does not guess.
 
+## Shared Work/Codex usage control
+
+```bash
+python -m quotaflow codex-limits
+python -m quotaflow ai-plan --ai-tasks examples/ai_tasks.example.json --ai-budget examples/ai_budget.unknown.json
+```
+
+Codex is queried read-only and no model turn is created. An unknown monthly shared Work/Codex credit value **blocks** agent tasks; Work and Codex are never invoked automatically. See [details](docs/CODEX_WORK_SHARED_USAGE.md).
+
 ## Explicit limitations
 
-- **No automatic reading of ChatGPT Work/Codex allowance**. On personal plans, use available ChatGPT/Codex usage dashboards or `/status`; there is no supported generic account API in this project. Work/Codex quota is a separate advisory/manual decision and is not inferred from GitHub Actions.
+- **Codex rate-window percentages** can be read with `python -m quotaflow codex-limits` from a signed-in local Codex CLI, using its official read-only app-server API. **Work/Codex shared monthly credits** are distinct and not inferred from these windows; check supported ChatGPT account UI. Run `ai-plan` with a manually observed credit budget; it never starts an AI agent.
 - The GitHub connector may not expose billing permissions; the optional `billing-probe` will report access failure and leave usable quota unknown.
 - No automated quota discovery when auth/plan is unsupported; no deployment to any user's machine/server, no auto-run scheduler, no self-hosted runner or arbitrarily timed background work in this release.
 - No unified risk pool for trading; no Binance keys, no order/router actions, no strategy generation, and no private model data.
