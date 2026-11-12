@@ -77,3 +77,35 @@ def import_issue_comments(db,comments,secret,configured_owners):
                                    observed_at=event["observed_at_utc"])
         counts["duplicates" if state=="already_ingested" else "accepted"]+=1
     return counts
+
+def fetch_private_issue_comments(*, repository, issue_number, token, max_pages=5, opener=None):
+    """Read-only private issue feed, no token logging, no arbitrary URL target."""
+    from urllib import request, error
+    from .models import REPO
+    if not isinstance(repository,str) or not REPO.fullmatch(repository):
+        raise ConfigError("Invalid repository")
+    if type(issue_number) is not int or not 1<=issue_number<=100000000:
+        raise ConfigError("Invalid issue number")
+    if not isinstance(token,str) or not token:
+        raise ConfigError("Private issue read token required")
+    opener=opener or request.urlopen
+    combined=[]
+    for page in range(1,max_pages+1):
+        req=request.Request(
+            "https://api.github.com/repos/"+repository+"/issues/"+str(issue_number)+
+            "/comments?per_page=100&page="+str(page),
+            headers={"Authorization":"Bearer "+token,
+                     "Accept":"application/vnd.github+json",
+                     "User-Agent":"QuotaFlow-private-alerts-read",
+                     "X-GitHub-Api-Version":"2022-11-28"})
+        try:
+            with opener(req,timeout=20) as response:
+                payload=json.loads(response.read())
+        except (error.HTTPError,error.URLError,TimeoutError) as exc:
+            raise ConfigError("Cannot read authorized private issue feed") from None
+        if not isinstance(payload,list):
+            raise ConfigError("Expected GitHub issue comments array")
+        combined.extend(payload)
+        if len(payload)<100:
+            return combined
+    raise ConfigError("Private issue comments exceed safe paging limit; manual audit required")
