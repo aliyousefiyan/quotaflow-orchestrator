@@ -117,8 +117,18 @@ class QueueDB:
             self.conn.execute("ROLLBACK")
             raise
 
-    def account_hold(self, owner_id):
-        """Only an explicitly acknowledged verified reset can remove a hold."""
+    def account_hold(self, owner_id, now=None):
+        """Return only CURRENT UTC billing month holds. Keep prior months for audit."""
+        from .billing_period import same_billing_period
+        from .models import timestamp
+        now=now or datetime.now(timezone.utc)
+        row=self.conn.execute("SELECT level,threshold_pct,observed_at FROM quota_account_holds WHERE owner_id=?",(owner_id,)).fetchone()
+        if not row or not same_billing_period(timestamp(row["observed_at"]),now):
+            return None
+        return dict(row)
+
+    def archived_hold(self, owner_id):
+        """Read-only historical hold, even if no longer effective this month."""
         row=self.conn.execute("SELECT level,threshold_pct,observed_at FROM quota_account_holds WHERE owner_id=?",(owner_id,)).fetchone()
         return dict(row) if row else None
 
@@ -138,19 +148,26 @@ class QueueDB:
                 return "already_ingested"
             self.conn.execute("INSERT INTO quota_alerts(event_id,owner_id,threshold_pct,action,observed_at,ingested_at) VALUES (?,?,?,?,?,?)",
                               (event_id,owner_id,threshold_pct,action,observed_at,now))
+            from .billing_period import same_billing_period
+            from .models import timestamp
             current=self.conn.execute("SELECT level,threshold_pct,observed_at FROM quota_account_holds WHERE owner_id=?",(owner_id,)).fetchone()
-            # Out-of-order older messages may NOT reinstate a weaker state, downgrade hold,
-            # or move the observation timestamp backwards.
-            if (not current or
+            observation=timestamp(observed_at)
+            is_current_month=same_billing_period(observation,datetime.now(timezone.utc))
+            effective_current=(current is not None
+                              and same_billing_period(timestamp(current["observed_at"]), observation))
+            # Preserve the alert in immutable history but NEVER resurrect an
+            # obsolete previous-month hold or let it replace a newer record.
+            if is_current_month and (
+                not current or
                 (observed_at>=current["observed_at"] and
-                 (current["level"]!="hold" or action=="hold"))):
+                 (not effective_current or current["level"]!="hold" or action=="hold"))):
                 self.conn.execute("""INSERT INTO quota_account_holds(owner_id,level,threshold_pct,event_id,observed_at)
                     VALUES (?,?,?,?,?)
                     ON CONFLICT(owner_id) DO UPDATE SET level=excluded.level,
                         threshold_pct=excluded.threshold_pct,event_id=excluded.event_id,
                         observed_at=excluded.observed_at""",(owner_id,action,threshold_pct,event_id,observed_at))
             self.conn.execute("COMMIT")
-            return action
+            return action if is_current_month else "archived_previous_month"
         except BaseException:
             self.conn.execute("ROLLBACK")
             raise

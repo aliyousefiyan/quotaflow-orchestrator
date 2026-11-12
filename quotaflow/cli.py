@@ -16,10 +16,13 @@ def main(argv=None):
     p.add_argument("--budgets",default="budgets.json")
     p.add_argument("--state",default=".quotaflow/queue.sqlite3")
     p.add_argument("--routing",default=None,help="Optional exact priority order; Yahoo always last")
+    p.add_argument("--project-registry",default=None,help="Private canonical project-to-GitHub account map; fail closed")
     sub=p.add_subparsers(dest="command",required=True)
     enq=sub.add_parser("enqueue",help="Add immutable job definitions from JSON")
     enq.add_argument("--file",required=True)
     sub.add_parser("plan",help="No network or mutation")
+    home=sub.add_parser("project-home",help="Find the canonical GitHub home account for one project/chat")
+    home.add_argument("--project",required=True)
     dispatch=sub.add_parser("dispatch",help="Dispatch at most one job if verified and quota-eligible")
     dispatch.add_argument("--approve-dispatch",action="store_true",help="Required for network-changing action")
     sub.add_parser("sync",help="Read-only remote run reconciliation")
@@ -64,7 +67,13 @@ def main(argv=None):
         db=QueueDB(args.state)
         from .alerts import load_routing, load_alert, ingest_verified_alert, preview_routing
         routing=load_routing(args.routing,accounts) if args.routing else None
-        if args.command=="alerts-sync-issue":
+        from .project_registry import load_project_registry,project_home_report
+        registry=load_project_registry(args.project_registry,accounts) if args.project_registry else None
+        if args.command=="project-home":
+            if registry is None:
+                raise ConfigError("Canonical --project-registry is required")
+            value=project_home_report(registry,args.project)
+        elif args.command=="alerts-sync-issue":
             import os
             from .issue_alerts import import_issue_comments,fetch_private_issue_comments
             key=os.environ.get("QF_ALERT_HMAC_SECRET","")
@@ -103,9 +112,9 @@ def main(argv=None):
                 raise ConfigError("Job definitions must be a JSON list")
             value=[{"id":j.id,"status":db.add(j)} for j in (Job.parse(v) for v in raw)]
         elif args.command=="plan":
-            value=plan(db,accounts,budgets,routing)
+            value=plan(db,accounts,budgets,routing,registry)
         elif args.command=="dispatch":
-            value=dispatch_one(db,accounts,budgets,approved=args.approve_dispatch,routing_priority=routing)
+            value=dispatch_one(db,accounts,budgets,approved=args.approve_dispatch,routing_priority=routing,project_registry=registry)
         elif args.command=="sync":
             value=sync(db,accounts)
         elif args.command in ("doctor","billing-probe"):

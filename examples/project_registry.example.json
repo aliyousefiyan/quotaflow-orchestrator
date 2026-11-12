@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "projects": [
+    {
+      "project": "StrategyAlpha",
+      "aliases": [
+        "Alpha"
+      ],
+      "home_account": "owner_a",
+      "home_repository": "owner-a/strategy-alpha",
+      "status": "verified_repository",
+      "portable_profiles": [],
+      "notes": "This account owns source, inputs, records and research results. No cross-owner code transfer."
+    },
+    {
+      "project": "PublicDocs",
+      "aliases": [
+        "Docs"
+      ],
+      "home_account": "owner_b",
+      "home_repository": "owner-b/docs",
+      "status": "verified_repository",
+      "portable_profiles": [
+        "smoke"
+      ],
+      "notes": "Synthetic smoke may use another owner if independently authorized; docs stay in owner_b."
+    },
+    {
+      "project": "AwaitingImport",
+      "aliases": [
+        "PendingProject"
+      ],
+      "home_account": "owner_c",
+      "home_repository": null,
+      "status": "proposed_home",
+      "portable_profiles": [],
+      "notes": "Not allowed to dispatch until the verified source repository exists."
+    }
+  ]
+}
