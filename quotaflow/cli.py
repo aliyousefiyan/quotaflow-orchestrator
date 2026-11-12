@@ -24,7 +24,25 @@ def main(argv=None):
     sub.add_parser("sync",help="Read-only remote run reconciliation")
     sub.add_parser("doctor",help="Verify remote ownership and worker contracts (read-only)")
     sub.add_parser("billing-probe",help="Try read-only billing endpoint without auto-granting quota")
+    sub.add_parser("codex-limits",help="Read Codex rate windows via official local app-server (no model turn)")
+    ai=sub.add_parser("ai-plan",help="Plan Work and Codex tasks against shared manually attested credits")
+    ai.add_argument("--ai-tasks",required=True)
+    ai.add_argument("--ai-budget",required=True)
     args=p.parse_args(argv)
+    if args.command in ("codex-limits","ai-plan"):
+        try:
+            from .codex_usage import CodexLimitError, get_rate_limits, plan_ai_tasks
+            if args.command=="codex-limits":
+                value=get_rate_limits()
+            else:
+                tasks=json.loads(Path(args.ai_tasks).read_text(encoding="utf-8"))
+                budget=json.loads(Path(args.ai_budget).read_text(encoding="utf-8"))
+                value=plan_ai_tasks(tasks,budget)
+            print(json.dumps(value,ensure_ascii=False,indent=2))
+            return 0
+        except (CodexLimitError,ValueError,OSError,json.JSONDecodeError) as exc:
+            print(json.dumps({"error":str(exc)},ensure_ascii=False))
+            return 2
     db=None
     try:
         accounts=load_accounts(args.config)
