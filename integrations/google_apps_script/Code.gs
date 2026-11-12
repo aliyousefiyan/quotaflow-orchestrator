@@ -1,5 +1,7 @@
 /**
- * QuotaFlow Gmail watcher — user installs this in their own Google Apps Script.
+ * QuotaFlow Gmail watcher — OAuth Gmail API READ-ONLY, never GmailApp.
+ * Requires EXACT manifest scopes: gmail.readonly + script.external_request + script.scriptapp.
+ * It cannot send, modify or delete messages with this OAuth token.
  * It never runs a GitHub workflow; it only writes signed, hold-only notices
  * into an authorized PRIVATE GitHub issue. Secrets stay in Script Properties.
  *
@@ -95,6 +97,92 @@ function qfComment_(cfg,event) {
   if(response.getResponseCode()!==201)
     throw new Error("Private GitHub issue receipt failed HTTP "+response.getResponseCode());
 }
+
+/**
+ * Gmail REST API integration with a scope-limited Apps Script OAuth token.
+ * API path is always under users/me/messages and methods are GET only.
+ * GmailApp is intentionally never referenced (it requires full-mail scope).
+ */
+function qfGmailApi_(suffix) {
+  if(typeof suffix!=="string" || !/^(\?|\/[A-Za-z0-9_-]{1,200}\?format=full$)/.test(suffix))
+    throw new Error("Unsafe Gmail API resource path");
+  const url="https://gmail.googleapis.com/gmail/v1/users/me/messages"+suffix;
+  const response=UrlFetchApp.fetch(url,{
+    method:"get",headers:{"Authorization":"Bearer "+ScriptApp.getOAuthToken(),
+                           "Accept":"application/json"},
+    muteHttpExceptions:true});
+  if(response.getResponseCode()!==200)
+    throw new Error("Gmail read-only API status "+response.getResponseCode());
+  const raw=JSON.parse(response.getContentText());
+  if(!raw || typeof raw!=="object" || Array.isArray(raw))
+    throw new Error("Invalid Gmail API JSON response");
+  return raw;
+}
+function qfListMessageIds_() {
+  // One bounded page per polling cycle; no content or private addresses in logs.
+  const q=encodeURIComponent("from:(github.com) newer_than:7d");
+  const response=qfGmailApi_("?maxResults=60&q="+q);
+  if(response.nextPageToken)
+    throw new Error("Gmail result exceeds safe 60-message window; manual review");
+  const items=Array.isArray(response.messages)?response.messages:[];
+  if(items.length>60)throw new Error("Gmail result exceeds maximum expected page size");
+  const ids=[];
+  for(const obj of items) {
+    if(!obj || typeof obj.id!=="string" || !/^[A-Za-z0-9_-]{1,200}$/.test(obj.id))
+      throw new Error("Invalid Gmail message ID");
+    ids.push(obj.id);
+  }
+  return ids;
+}
+function qfHeader_(headers,name) {
+  if(!Array.isArray(headers)) return "";
+  const matches=headers.filter(h=>h && typeof h.name==="string" &&
+      h.name.toLowerCase()===name.toLowerCase() && typeof h.value==="string");
+  return matches.map(h=>h.value).join("\n").slice(0,10000);
+}
+function qfPlainPart_(node,depth) {
+  if(!node || typeof node!=="object" || depth>8) return "";
+  // Never extract attachment payload; do not silently read HTML-only messages.
+  if(node.filename) return "";
+  if(String(node.mimeType||"").toLowerCase()==="text/plain" &&
+     node.body && typeof node.body.data==="string") {
+    const data=node.body.data;
+    if(data.length>180000) return "";
+    const padded=data+"=".repeat((4-data.length%4)%4);
+    try {
+      return Utilities.newBlob(Utilities.base64DecodeWebSafe(padded))
+        .getDataAsString("UTF-8").slice(0,18000);
+    } catch(ex) {
+      return "";
+    }
+  }
+  if(Array.isArray(node.parts)) {
+    for(const part of node.parts.slice(0,30)) {
+      const plain=qfPlainPart_(part,depth+1);
+      if(plain) return plain;
+    }
+  }
+  return "";
+}
+function qfMessageFromApi_(resource) {
+  if(!resource || typeof resource.id!=="string" || !resource.payload)
+    throw new Error("Malformed Gmail full-message response");
+  const headers=resource.payload.headers;
+  if(!Array.isArray(headers))throw new Error("Missing Gmail API message headers");
+  const time=Number(resource.internalDate);
+  if(!Number.isFinite(time) || time<=0)throw new Error("Invalid Gmail API received date");
+  const received=new Date(time);
+  if(Number.isNaN(received.getTime()))throw new Error("Invalid Gmail API timestamp");
+  return {
+    getId:()=>resource.id,
+    getDate:()=>received,
+    getFrom:()=>qfHeader_(headers,"From"),
+    getSubject:()=>qfHeader_(headers,"Subject"),
+    getHeader:(name)=>qfHeader_(headers,name),
+    getPlainBody:()=>qfPlainPart_(resource.payload,0)
+  };
+}
+
 function installQuotaFlowMonitor() {
   qfProperties_();
   if(ScriptApp.getProjectTriggers().some(t=>t.getHandlerFunction()==="pollGitHubQuotaAlerts")) return;
@@ -108,22 +196,19 @@ function pollGitHubQuotaAlerts() {
     const processed=JSON.parse(props.getProperty("QF_PROCESSED_IDS_JSON")||"[]");
     const seen=new Set(processed);
     let scanned=0,accepted=0,rejected=0;
-    const threads=GmailApp.search("from:(github.com) newer_than:7d",0,60);
-    for(const thread of threads) {
-      for(const msg of thread.getMessages()) {
-        if(++scanned>120) break;
-        const id=msg.getId();
-        if(seen.has(id)) continue;
-        const event=qfParse_(msg,cfg.owners);
-        if(!event){rejected++;continue;}
-        if(!cfg.dryRun) {
-          qfComment_(cfg,event);
-          processed.push(id);
-          seen.add(id);
-        }
-        accepted++;
+    const ids=qfListMessageIds_();
+    for(const id of ids) {
+      if(seen.has(id)) continue;
+      scanned++;
+      const msg=qfMessageFromApi_(qfGmailApi_("/"+encodeURIComponent(id)+"?format=full"));
+      const event=qfParse_(msg,cfg.owners);
+      if(!event){rejected++;continue;}
+      if(!cfg.dryRun) {
+        qfComment_(cfg,event);
+        processed.push(id);
+        seen.add(id);
       }
-      if(scanned>120) break;
+      accepted++;
     }
     if(!cfg.dryRun) props.setProperty("QF_PROCESSED_IDS_JSON",JSON.stringify(processed.slice(-450)));
     console.log(JSON.stringify({dry_run:cfg.dryRun,scanned,verified_matches:accepted,manual_review:rejected}));
