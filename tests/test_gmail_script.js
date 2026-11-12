@@ -130,8 +130,12 @@ sandbox.PropertiesService={getScriptProperties:()=>({
 sandbox.console.log=(item)=>{noWriteLogged=String(item)};
 sandbox.diagnoseQuotaFlowAlerts();
 const diagnostic=JSON.parse(noWriteLogged);
-assert.equal(diagnostic.mode,"historic_readonly");
-assert.equal(diagnostic.lookback_days,90);
+assert.equal(diagnostic.mode,"current_calendar_month_readonly");
+const today=new Date();
+const firstUtc=new Date(Date.UTC(today.getUTCFullYear(),today.getUTCMonth(),1)).toISOString();
+assert.equal(diagnostic.billing_period_start_utc,firstUtc);
+assert.equal(diagnostic.no_remote_writes,true);
+assert.equal("lookback_days" in diagnostic,false);
 assert.equal(diagnostic.no_remote_writes,true);
 assert.equal(issuedRequests.every(x=>x.method==="get"),true);
 assert.equal(diagnostic.scanned,1);
@@ -140,3 +144,57 @@ assert.equal(Object.keys(diagnostic).includes("subject"),false);
 console.log("Real 100% subject + bounded privacy-safe Gmail diagnosis: 14 assertions PASS");
 
 
+
+
+// Calendar-month, not rolling days, for both real polling and historical
+// diagnosis. These assertions cover UTC midnight, year rollover, and February.
+const firstOfUtc=(date)=>new Date(Date.UTC(date.getUTCFullYear(),date.getUTCMonth(),1));
+const unix=(date)=>Math.floor(date.getTime()/1000);
+const cases=[
+  ["2026-11-01T00:00:00.000Z","2026-11-01T00:00:00.000Z"],
+  ["2026-11-12T23:59:59.000Z","2026-11-01T00:00:00.000Z"],
+  ["2026-11-30T23:59:59.000Z","2026-11-01T00:00:00.000Z"],
+  ["2026-12-01T00:00:00.000Z","2026-12-01T00:00:00.000Z"],
+  ["2027-01-01T00:00:00.000Z","2027-01-01T00:00:00.000Z"],
+  ["2028-02-29T23:59:59.000Z","2028-02-01T00:00:00.000Z"],
+  ["2028-03-01T00:00:00.000Z","2028-03-01T00:00:00.000Z"]
+];
+for(const [current,start] of cases) {
+  const now=new Date(current);
+  const actual=sandbox.qfCalendarMonthUtc_(now);
+  assert.equal(actual.startUtc,start);
+  assert.equal(actual.startEpochSeconds,unix(new Date(start)));
+  const expectedTime=String(unix(new Date(start))-1);
+  assert.equal(sandbox.qfMonthSearch_(false,now),"from:(github.com) after:"+expectedTime);
+  assert.equal(sandbox.qfMonthSearch_(true,now),'from:(github.com) subject:"Actions minutes" after:'+expectedTime);
+}
+const normalQuery=sandbox.qfMonthSearch_(false);
+const subjectQuery=sandbox.qfMonthSearch_(true);
+assert.equal(normalQuery.includes("newer_than:"),false);
+assert.equal(subjectQuery.includes("newer_than:"),false);
+assert.equal(normalQuery.includes("after:"),true);
+assert.equal(subjectQuery.includes("after:"),true);
+const currentStart=unix(firstOfUtc(new Date()))-1;
+assert.ok(normalQuery.endsWith("after:"+currentStart));
+assert.ok(subjectQuery.endsWith("after:"+currentStart));
+// Security gate: current-month paths are accepted; arbitrary or prior-month
+// list paths cannot be used for a Gmail API request.
+const thisMonthPath="?maxResults=60&q="+encodeURIComponent(normalQuery);
+assert.doesNotThrow(()=>sandbox.qfGmailApi_(thisMonthPath));
+const historicMonth=new Date(Date.UTC(new Date().getUTCFullYear(),new Date().getUTCMonth()-1,15));
+const staleMonthPath="?maxResults=60&q="+encodeURIComponent(sandbox.qfMonthSearch_(false,historicMonth));
+assert.throws(()=>sandbox.qfGmailApi_(staleMonthPath),/Unsafe Gmail API resource path/);
+// Verify that both monitoring and diagnostic use the current month UTC
+// and never permit a sliding 7/30/90-day query.
+const requestCount=issuedRequests.length;
+sandbox.qfListMessageIds_(false);
+sandbox.qfListMessageIds_(true);
+const recent=issuedRequests.slice(requestCount);
+assert.equal(recent.length,2);
+for(const request of recent){
+  const decoded=decodeURIComponent(request.url);
+  assert.ok(decoded.includes("after:"+currentStart));
+  assert.equal(/newer_than:\d+d/.test(decoded),false);
+  assert.equal(request.method,"get");
+}
+console.log("UTC calendar billing month: 7 boundary cases + current-month-only API paths PASS");
