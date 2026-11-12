@@ -4,7 +4,7 @@ This is an **optional, explicit-consent Google Apps Script** integration. The us
 
 Configure Script Properties as in [Persian instructions](README.fa.md). Keep `QF_DRY_RUN=true` until the account mapping and actual GitHub email format have been verified. The second Gmail owner is the next priority; the Yahoo owner is third and must have a fresh independent Actions budget before any private dispatch.
 
-The controller command `alerts-sync-issue` reads the private issue through a limited Issues:read token and verifies HMAC from `QF_ALERT_HMAC_SECRET`. A valid alert can warn (75%) or indefinitely hold new jobs (85/90/100%); it **cannot resume jobs, dispatch work, grant quota, or change code**. New-period reset is a separate explicitly approved action.
+The controller command `alerts-sync-issue` reads the private issue through a limited Issues:read token and verifies HMAC from `QF_ALERT_HMAC_SECRET`. A valid alert can warn (75%) or indefinitely hold new jobs (85/90/100%); it **cannot resume jobs, dispatch work, grant quota, or change code**. New-period reset is a separate explicitly approved action. Private routing is blocked unless the HMAC-verified private issue feed has been fetched successfully within the last 60 minutes.
 
 GitHub's officially documented included-usage email alerts generally occur at 90% and 100%, and configured budget alerts at 75%, 90%, and 100%; 85% is a custom internal protective threshold, not a promise about GitHub email content. If parsing is ambiguous, fail closed and request manual review.
 
