@@ -43,9 +43,18 @@ class GitHub:
             raise GitHubError(f"GitHub network/timeout problem for {method} {path.split('?')[0]}") from None
 
     def verify(self):
-        who = self.api("/user")
-        if not isinstance(who, dict) or who.get("login", "").lower() != self.account.owner.lower():
-            raise GitHubError("Token user differs from configured repository owner; routing disabled")
+        # Repo-scoped Actions tokens are GitHub App tokens, not human account tokens.
+        # This explicit self-repo-only mode is limited to PUBLIC standard runner jobs.
+        self_token = self.account.github_actions_self_token
+        if self_token:
+            if (self.env.get("GITHUB_ACTIONS") != "true"
+                or self.env.get("GITHUB_REPOSITORY", "").lower() != self.account.repository.lower()
+                or self.env.get("GITHUB_REPOSITORY_OWNER", "").lower() != self.account.owner.lower()):
+                raise GitHubError("GitHub Actions self-token requires exact current repo and owner")
+        else:
+            who = self.api("/user")
+            if not isinstance(who, dict) or who.get("login", "").lower() != self.account.owner.lower():
+                raise GitHubError("Token user differs from configured repository owner; routing disabled")
         repo_name = self.account.repository
         repo = self.api("/repos/" + repo_name)
         if not isinstance(repo, dict) or repo.get("full_name", "").lower() != repo_name.lower() or repo.get("owner", {}).get("login", "").lower() != self.account.owner.lower():
@@ -54,6 +63,9 @@ class GitHub:
             raise GitHubError("Archived repository is not dispatchable")
         if self.account.public_standard_runner and repo.get("private") is not False:
             raise GitHubError("Repository is not verified public; free public compute claim rejected")
+        if self_token and (repo.get("private") is not False
+                           or self.account.ref != repo.get("default_branch")):
+            raise GitHubError("Self-repo token may dispatch only the current public default branch")
         wf_name = parse.quote(self.account.workflow)
         wf = self.api("/repos/" + repo_name + "/actions/workflows/" + wf_name)
         if not isinstance(wf, dict) or wf.get("state") != "active":
@@ -70,7 +82,9 @@ class GitHub:
             "workflow_dispatch:" not in source or
             "github.event.inputs.profile" not in source and "inputs.profile" not in source):
             raise GitHubError("Worker contract not present in repository workflow")
-        return {"owner": who["login"], "repository": repo["full_name"], "workflow": wf.get("name"),
+        return {"owner": repo["owner"]["login"] if self_token else who["login"],
+                "auth_mode": "repo_scoped_actions_self" if self_token else "human_owner",
+                "repository": repo["full_name"], "workflow": wf.get("name"),
                 "private": repo["private"], "verified_source": True}
 
     def dispatch(self, job_id: str, profile: str):
