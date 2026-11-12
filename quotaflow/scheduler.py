@@ -29,6 +29,9 @@ def choose(job: Job, accounts: dict[str,Account], budget: dict[str,dict], db: Qu
         if not account:
             reasons.append((account_id,"not_configured"))
             continue
+        if routing_priority is not None and not db.alert_source_fresh():
+            reasons.append((account_id,"email_alert_feed_missing_or_stale"))
+            continue
         hold=db.account_hold(account_id)
         if hold and hold["level"]=="hold":
             reasons.append((account_id,"held_by_actions_email"))
