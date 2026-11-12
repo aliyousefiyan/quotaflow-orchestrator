@@ -98,3 +98,8 @@ Codex is queried read-only and no model turn is created. An unknown monthly shar
 - [Codex usage](https://help.openai.com/en/articles/11369540-using-codex-with-your-chatgpt-plan)
 
 License: MIT. Contributions and security reviews welcome.
+
+
+### Calendar-month GitHub Actions alerts
+
+The Gmail monitor and its dry-run diagnosis search **the current UTC calendar billing month, starting on day 1 at 00:00 UTC through the search time** (not a rolling 7/30/90 days). The query automatically rolls to the next month, with Gmail's Unix-epoch second format avoiding implicit PST dates. Old-month alerts never prove current-month exhaustion; fresh, verified funds and explicit owner approval are still required to lift a historical hold. See [Gmail guide](integrations/google_apps_script/README.md).
