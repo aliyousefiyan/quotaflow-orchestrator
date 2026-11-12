@@ -4,7 +4,7 @@
 
 > v0.3.0 — verified pilot, not production trading software. Explicit GitHub workflow dispatch is supported; automatic unattended scheduling and live multi-owner deployment are **not** enabled. When billing data is unavailable or stale, private repo jobs are blocked. This is intentional.
 
-[راهنمای فارسی](README.fa.md) · [Security](SECURITY.md) · [Architecture](docs/ARCHITECTURE.md)
+[راهنمای فارسی](README.fa.md) · [Security](SECURITY.md) · [Architecture](docs/ARCHITECTURE.md) · [Activation approvals (FA)](docs/ACTIVATION_APPROVALS_FA.md) · [Activation approvals (EN)](docs/ACTIVATION_APPROVALS_EN.md)
 
 ## Why this exists
 
