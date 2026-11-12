@@ -46,3 +46,8 @@ We do **not** execute arbitrary uploaded code, remote URLs, bash snippets, AI pr
 - Worker artifact digest verification, pagination and attestation.
 - Private per-project adapter with reviewed profile contracts.
 - A supported personal Work/Codex usage feed, if available; until then, manual quota entry only.
+
+
+## Built-in GitHub Actions token in one public repo (v0.3)
+
+Opt-in `github_actions_self_token=true` is limited to a **verified public repo** matching the current GitHub Actions runtime (`GITHUB_ACTIONS=true`, `GITHUB_REPOSITORY`, `GITHUB_REPOSITORY_OWNER`), the owner's repository and default branch. This allows public same-repo smoke jobs without long-lived PAT. The token must still be authorized for `actions:write`; the workflow allows only immutable ID and static profile. This special mode does **not** enable private or cross-owner dispatch or account quota transfer.
