@@ -1,0 +1,60 @@
+# QUOTAFLOW_WORKER_V1
+# Copy to .github/workflows/quotaflow-worker.yml of a dedicated owner-controlled repository.
+# NEVER accept arbitrary shell strings or remote code as workflow inputs.
+name: QuotaFlow approved worker
+run-name: QuotaFlow ${{ inputs.job_id }}
+on:
+  workflow_dispatch:
+    inputs:
+      job_id:
+        description: Immutable controller job identifier
+        required: true
+        type: string
+      profile:
+        description: Approved deterministic recipe
+        required: true
+        type: choice
+        options:
+          - smoke
+          - sample_compute
+permissions:
+  contents: read
+concurrency:
+  group: quotaflow-${{ inputs.job_id }}
+  cancel-in-progress: false
+jobs:
+  deterministic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate profile and execute safe deterministic recipe
+        env:
+          QF_ID: ${{ inputs.job_id }}
+          QF_PROFILE: ${{ inputs.profile }}
+        shell: bash
+        run: |
+          python - <<'PY'
+          import hashlib,json,os,re
+          job,profile=os.environ['QF_ID'],os.environ['QF_PROFILE']
+          if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,63}',job):
+              raise SystemExit('Bad job ID')
+          if profile not in ('smoke','sample_compute'):
+              raise SystemExit('Profile denied')
+          if profile=='smoke':
+              output={'job_id':job,'profile':profile,'ok':True}
+          else:
+              # No network, market data, accounts, trade execution, or external inputs.
+              squares=sum(n*n for n in range(10_000))
+              output={'job_id':job,'profile':profile,'checksum':hashlib.sha256(str(squares).encode()).hexdigest()}
+          os.makedirs('quotaflow-results',exist_ok=True)
+          with open('quotaflow-results/result.json','w') as f:
+              json.dump(output,f,sort_keys=True)
+          print(json.dumps(output,sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: quotaflow-${{ inputs.job_id }}
+          path: quotaflow-results/result.json
+          retention-days: 7
+          if-no-files-found: error
