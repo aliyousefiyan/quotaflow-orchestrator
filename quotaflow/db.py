@@ -35,6 +35,10 @@ CREATE TABLE IF NOT EXISTS quota_alerts (
   observed_at TEXT NOT NULL,
   ingested_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS quota_source_health (
+  source TEXT PRIMARY KEY,
+  last_success_utc TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS quota_account_holds (
   owner_id TEXT PRIMARY KEY,
   level TEXT NOT NULL,
@@ -170,3 +174,19 @@ class QueueDB:
         except BaseException:
             self.conn.execute("ROLLBACK")
             raise
+
+    def mark_alert_source_checked(self):
+        """Only call after a complete authenticated private-issue read succeeded."""
+        self.conn.execute("""INSERT INTO quota_source_health(source,last_success_utc)
+              VALUES ('github_private_issue',?)
+              ON CONFLICT(source) DO UPDATE SET last_success_utc=excluded.last_success_utc""",
+              (utcnow(),))
+
+    def alert_source_fresh(self, max_age_minutes=60):
+        row=self.conn.execute(
+            "SELECT last_success_utc FROM quota_source_health WHERE source='github_private_issue'"
+        ).fetchone()
+        if not row: return False
+        from .models import timestamp
+        age=(datetime.now(timezone.utc)-timestamp(row[0])).total_seconds()
+        return -300<=age<=max_age_minutes*60
