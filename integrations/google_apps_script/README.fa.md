@@ -9,9 +9,30 @@
 4. کنترل‌کننده پیام‌های همان Issue را فقط‌خواندنی دریافت کرده و امضای HMAC را بررسی می‌کند. ۷۵٪ به معنی اخطار، و **۸۵٪ به بالا به معنی HOLD** است. این HOLD تا تأیید دستی بودجه جدید باقی می‌ماند.
 5. کار جدید به حساب Gmail دوم با بودجه تأییدشده منتقل می‌شود. **Yahoo آخرین گزینه** و فقط با بودجه و مجوز مستقل است. کارهای درحال‌اجرا به خاطر اخطار متوقف نمی‌شوند.
 
+## نسخه امن Gmail Read-only — ضروری
+
+این نسخه عمداً دیگر از `GmailApp` استفاده نمی‌کند. از API رسمی Gmail با مجوز **`gmail.readonly`** و توکن محدود به همان محدوده استفاده می‌کند؛ بنابراین برنامه حق ارسال، ویرایش یا حذف ایمیل ندارد.
+
+**هر دو فایل باید در پروژه Google Apps Script جایگزین شوند:**
+
+مانيفست جدید علاوه‌بر محدودکردن مجوزها، Gmail API را در سرویس‌های پیشرفته پروژه فعال می‌کند (برای پروژه پیش‌فرض Google Cloud) و اتصال خارجی را به آدرس‌های Gmail API و GitHub API محدود می‌کند. <https://developers.google.com/apps-script/guides/services/advanced>
+
+1. در Editor، **تمام کد قبلی `Code.gs`** را حذف و [نسخه به‌روز `Code.gs`](Code.gs) را کامل جایگزین و Save کنید. هیچ تابع قدیمی `GmailApp` نباید در پروژه باقی بماند.
+2. در **Project Settings** تیک `Show "appsscript.json" manifest file in editor` را فعال کنید.
+3. فایل `appsscript.json` در Editor نمایش داده می‌شود؛ مقدار `oauthScopes` را دقیقاً برابر [manifest محدودشده](appsscript.json) تنظیم کنید (یا اگر تنظیمات دیگری ندارید کل فایل نمونه را جایگزین کنید):
+   - `https://www.googleapis.com/auth/gmail.readonly`
+   - `https://www.googleapis.com/auth/script.external_request`
+   - `https://www.googleapis.com/auth/script.scriptapp`
+4. Save و Refresh کنید و دوباره `pollGitHubQuotaAlerts` را در حالت `QF_DRY_RUN=true` اجرا کنید. در صفحه OAuth باید «**خواندن ایمیل**»، «اتصال به سرویس بیرونی» و «اجرای برنامه بدون حضور شما» دیده شود، **نه** «Read, compose, send, and permanently delete all your email». اگر مجوز کامل Gmail همچنان ظاهر شد، **تأیید نکنید**؛ کدهای باقیمانده و `oauthScopes` را بررسی کنید.
+5. اگر قبلاً مجوز گسترده را داده‌اید، از `Google Account → Security → Your connections to third-party apps & services` دسترسی قبلی همین پروژه را لغو کنید و سپس با نسخه جدید دوباره مجوز بدهید. لغو ممکن است اجرای Triggerهای قبلی را متوقف کند.
+
+**نکته:** `gmail.readonly` همچنان از لحاظ خواندن، به پیام‌های صندوق Gmail دسترسی دارد و محدود به ایمیل‌های GitHub نیست؛ تنها *رفتار کد* جستجو را به پیام‌های مرتبط با GitHub محدود می‌کند. توکن ارسال/حذف ندارد. چون نیاز داریم صاحب دو حساب را از محتوای هشدار تشخیص بدهیم، دسترسی صرفاً به فراداده (`gmail.metadata`) کافی نیست.
+
+**مرحله اول آزمایشی** فقط `QF_OWNER_MAP_JSON` و `QF_DRY_RUN=true` را در Script Properties لازم دارد. توکن GitHub، Issue و HMAC در Dry Run لازم نیست. قبل از صدور مجوزهای واقعی، کد و Manifest را هر دو تعویض کنید.
+
 ## راه‌اندازی یک‌باره Gmail
 1. از حساب Gmail مشترک به [script.google.com](https://script.google.com/) بروید و **New project** بسازید.
-2. کد [Code.gs](Code.gs) را قرار دهید. در **Project Settings → Script Properties** این مقادیر را به‌صورت خصوصی وارد کنید:
+2. هر دو فایل [Code.gs](Code.gs) و [appsscript.json](appsscript.json) را مطابق بخش بالا در همان پروژه تنظیم کنید. سپس در **Project Settings → Script Properties** این مقادیر را به‌صورت خصوصی وارد کنید:
    - `QF_OWNER_MAP_JSON`: برای دو حساب مجاز، نمونه `{"github-owner-one":"owner_a","github-owner-two":"owner_b"}`
    - `QF_PRIVATE_REPO`: مخزن خصوصی محل ثبت هشدارها؛ **نه مخزن عمومی QuotaFlow**
    - `QF_ISSUE_NUMBER`: شماره Issue خصوصی اختصاصی هشدارهای سهمیه
@@ -46,4 +67,4 @@ python -m quotaflow --config accounts.json --budgets budgets.json --routing rout
 - ارسال خودکار کار از این ابزار بدون صف، Controller معتبر، توکن مجاز و بودجه تازه مجاز نیست. گزینه `dispatch --approve-dispatch` همچنان جداگانه لازم است.
 - هیچ دسترسی Work/Codex، سفارش معاملاتی، SSH یا داده خصوصی در پل ایمیل وجود ندارد.
 
-مراجع: [GitHub Alerts](https://docs.github.com/en/billing/how-tos/set-up-budgets)، [Google GmailApp](https://developers.google.com/apps-script/reference/gmail/gmail-app)، [Time-driven triggers](https://developers.google.com/apps-script/guides/triggers/installable).
+مراجع: [GitHub Alerts](https://docs.github.com/en/billing/how-tos/set-up-budgets)، [Gmail API read-only](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages/get)، [Time-driven triggers](https://developers.google.com/apps-script/guides/triggers/installable).

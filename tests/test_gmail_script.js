@@ -41,3 +41,58 @@ assert.equal(parsed({subject:"GitHub Actions usage alert",body:"For account-one:
 assert.match(parsed({}).event_id,/^[0-9a-f]{64}$/);
 assert.equal(sandbox.qfOwner_("account-one account-two",owners),null);
 console.log("Gmail Apps Script parser offline: 14 assertions PASS");
+
+// Gmail API READONLY backend tests: no GmailApp, no real network, no credentials.
+const manifest=JSON.parse(fs.readFileSync("integrations/google_apps_script/appsscript.json","utf8"));
+assert.deepEqual(manifest.oauthScopes,[
+  "https://www.googleapis.com/auth/gmail.readonly",
+  "https://www.googleapis.com/auth/script.external_request",
+  "https://www.googleapis.com/auth/script.scriptapp"
+]);
+assert.equal(/\bGmailApp\s*\./.test(code),false);
+const b64url=txt=>Buffer.from(txt,"utf8").toString("base64url");
+const payload={
+  id:"a1b2c3d4e5f6",
+  internalDate:String(Date.parse("2026-11-12T12:30:00Z")),
+  payload:{
+    mimeType:"multipart/alternative",
+    headers:[
+      {name:"From",value:"GitHub <billing@github.com>"},
+      {name:"Subject",value:"GitHub Actions usage reached 90%"},
+      {name:"Authentication-Results",value:"mx.google.com; dkim=pass header.d=github.com; spf=pass"}
+    ],
+    parts:[
+      {mimeType:"text/plain",body:{data:b64url("For account-one: You have used 90% of your GitHub Actions minutes allowance.")}},
+      {mimeType:"text/html",body:{data:b64url("<b>Not used</b>")}}
+    ]
+  }
+};
+sandbox.Utilities.newBlob=(bytes)=>({getDataAsString:()=>Buffer.from(bytes).toString("utf8")});
+sandbox.Utilities.base64DecodeWebSafe=(data)=>Array.from(Buffer.from(data,"base64url"));
+sandbox.ScriptApp={getOAuthToken:()=>"fake-readonly-token"};
+let issuedRequests=[];
+sandbox.UrlFetchApp={fetch:(url,options)=>{
+  issuedRequests.push({url,method:options.method});
+  assert.ok(url.startsWith("https://gmail.googleapis.com/gmail/v1/users/me/messages"));
+  assert.equal(options.method,"get");
+  assert.equal(options.headers.Authorization,"Bearer fake-readonly-token");
+  const data=url.includes("?format=full")?payload:{messages:[{id:payload.id}]};
+  return {getResponseCode:()=>200,getContentText:()=>JSON.stringify(data)};
+}};
+const ids=sandbox.qfListMessageIds_();
+assert.deepEqual(Array.from(ids),[payload.id]);
+const loaded=sandbox.qfMessageFromApi_(sandbox.qfGmailApi_("/"+payload.id+"?format=full"));
+assert.equal(loaded.getFrom(),"GitHub <billing@github.com>");
+assert.equal(loaded.getSubject(),"GitHub Actions usage reached 90%");
+assert.equal(loaded.getDate().toISOString(),"2026-11-12T12:30:00.000Z");
+const event=sandbox.qfParse_(loaded,owners);
+assert.equal(event.owner_id,"gmail_a");
+assert.equal(event.threshold_pct,90);
+assert.equal(issuedRequests.length,2);
+assert.equal(issuedRequests.some(x=>x.method!=="get"),false);
+// Full-mail scope cannot be silently reintroduced via manifest changes.
+assert.equal(manifest.oauthScopes.includes("https://mail.google.com/"),false);
+assert.equal(manifest.oauthScopes.includes("https://www.googleapis.com/auth/gmail.modify"),false);
+assert.equal(manifest.oauthScopes.includes("https://www.googleapis.com/auth/gmail.send"),false);
+console.log("Gmail REST readonly backend: 13 assertions PASS");
+
