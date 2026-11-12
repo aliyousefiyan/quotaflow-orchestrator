@@ -1,0 +1,11 @@
+# Cloud Gmail alert monitoring (two Gmail owners, Yahoo last)
+
+This is an **optional, explicit-consent Google Apps Script** integration. The user must install it in the Gmail account that receives alerts for two GitHub owners. It watches messages on a 15-minute trigger, requires GitHub-aligned DKIM and unambiguous **GitHub Actions** account/threshold identity, and posts only a signed, pseudonymized hold-only receipt to a PRIVATE GitHub issue. No secrets are printed to logs or committed.
+
+Configure Script Properties as in [Persian instructions](README.fa.md). Keep `QF_DRY_RUN=true` until the account mapping and actual GitHub email format have been verified. The second Gmail owner is the next priority; the Yahoo owner is third and must have a fresh independent Actions budget before any private dispatch.
+
+The controller command `alerts-sync-issue` reads the private issue through a limited Issues:read token and verifies HMAC from `QF_ALERT_HMAC_SECRET`. A valid alert can warn (75%) or indefinitely hold new jobs (85/90/100%); it **cannot resume jobs, dispatch work, grant quota, or change code**. New-period reset is a separate explicitly approved action.
+
+GitHub's officially documented included-usage email alerts generally occur at 90% and 100%, and configured budget alerts at 75%, 90%, and 100%; 85% is a custom internal protective threshold, not a promise about GitHub email content. If parsing is ambiguous, fail closed and request manual review.
+
+**Not activated:** Gmail OAuth, Script Properties, private HMAC secret, private issue integration, and three owner billing records require operator setup. Nothing is deployed merely by publishing these files.
