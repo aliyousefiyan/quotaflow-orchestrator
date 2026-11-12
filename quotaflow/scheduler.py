@@ -21,13 +21,17 @@ def budget_fresh(item, now=None):
     return -300 <= elapsed <= MAX_AGE_HOURS * 3600
 
 
-def choose(job: Job, accounts: dict[str,Account], budget: dict[str,dict], db: QueueDB):
+def choose(job: Job, accounts: dict[str,Account], budget: dict[str,dict], db: QueueDB, routing_priority=None):
     choices=[]
     reasons=[]
     for account_id in job.target_accounts:
         account=accounts.get(account_id)
         if not account:
             reasons.append((account_id,"not_configured"))
+            continue
+        hold=db.account_hold(account_id)
+        if hold and hold["level"]=="hold":
+            reasons.append((account_id,"held_by_actions_email"))
             continue
         if job.profile not in account.profiles:
             reasons.append((account_id,"profile_not_allowed"))
@@ -53,26 +57,30 @@ def choose(job: Job, accounts: dict[str,Account], budget: dict[str,dict], db: Qu
             reasons.append((account_id,"quota_or_reserve_insufficient"))
             continue
         choices.append((available - job.estimated_usd, account_id))
-    choices.sort(key=lambda x:(-x[0],x[1]))
+    if routing_priority is not None:
+        rank={value:i for i,value in enumerate(routing_priority)}
+        choices.sort(key=lambda x:(rank.get(x[1],999999),-x[0]))
+    else:
+        choices.sort(key=lambda x:(-x[0],x[1]))
     return (choices[0][1] if choices else None),reasons
 
 
-def plan(db, accounts, budgets):
+def plan(db, accounts, budgets, routing_priority=None):
     rows=[]
     for row in db.list():
         job=Job.parse(json.loads(row["definition"]))
-        target,reasons=choose(job,accounts,budgets,db) if row["status"] == "queued" else (row["target"],[])
+        target,reasons=choose(job,accounts,budgets,db,routing_priority) if row["status"] == "queued" else (row["target"],[])
         rows.append({"id":row["id"],"project":job.project,"profile":job.profile,"status":row["status"],"suggested_owner":target,"blocked_reasons":reasons})
     return rows
 
 
-def dispatch_one(db: QueueDB, accounts, budgets, *, approved=False, github_factory=GitHub):
+def dispatch_one(db: QueueDB, accounts, budgets, *, approved=False, github_factory=GitHub, routing_priority=None):
     """Never invokes external workflow until explicitly --approve-dispatch, even with available quota."""
     if not approved:
-        return {"status":"dry_run", "plan":plan(db,accounts,budgets)}
+        return {"status":"dry_run", "plan":plan(db,accounts,budgets,routing_priority)}
     for row in db.list(status="queued"):
         job=Job.parse(json.loads(row["definition"]))
-        target,reasons=choose(job,accounts,budgets,db)
+        target,reasons=choose(job,accounts,budgets,db,routing_priority)
         if not target:
             continue
         account=accounts[target]
@@ -93,7 +101,7 @@ def dispatch_one(db: QueueDB, accounts, budgets, *, approved=False, github_facto
             return {"id":job.id,"target":target,"status":"ambiguous"}
         db.transition(job.id,"dispatching","dispatched",details="Accepted by GitHub; awaiting matching workflow run")
         return {"id":job.id,"target":target,"status":"dispatched"}
-    return {"status":"no_eligible_queued_jobs","plan":plan(db,accounts,budgets)}
+    return {"status":"no_eligible_queued_jobs","plan":plan(db,accounts,budgets,routing_priority)}
 
 
 def sync(db: QueueDB, accounts, github_factory=GitHub):
