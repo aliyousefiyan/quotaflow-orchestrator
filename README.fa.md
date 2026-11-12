@@ -46,3 +46,8 @@ python -m quotaflow --config examples/accounts.example.json --budgets examples/b
 ### نکته امنیتی Google Apps Script
 
 نسخه Gmail کم‌دسترسی از `gmail.readonly` استفاده می‌کند و در دو فایل مستقل [Code.gs](integrations/google_apps_script/Code.gs) و [appsscript.json](integrations/google_apps_script/appsscript.json) ارائه می‌شود. باید هر دو را در پروژه Google تنظیم کنید؛ کد قبلی GmailApp درخواست دسترسی کامل به ایمیل داشت و **نباید** مجوز آن را تأیید کرد.
+
+
+### دورهٔ ماهانهٔ GitHub Actions
+
+جست‌وجوی هشدارهای Gmail از ساعت `00:00:00 UTC` اولین روز **ماه میلادی جاری** تا لحظهٔ اجراست؛ بازه‌های شناور هفت یا سی‌روزه برای این منظور استفاده نمی‌شوند. Gmail API به‌دلیل دقت زمانی از ثانیه‌های Unix در `after:` استفاده می‌کند. مشاهدهٔ هشدار ماه قبل به‌معنی تمام‌شدن سهمیهٔ ماه جدید نیست؛ آزادسازی حساب با بررسی موجودی دورهٔ جدید انجام می‌شود. [راهنمای کامل](integrations/google_apps_script/README.fa.md).

@@ -111,9 +111,10 @@ function qfDiagnosticReason_(msg,owners) {
 }
 
 /**
- * Run manually ONLY with QF_DRY_RUN=true. Search historic subject patterns
- * up to 90 days to explain why 7-day polling may not find an older alert.
- * No email details, logins, content or secrets are printed. NO GitHub writes.
+ * Run manually ONLY with QF_DRY_RUN=true. Diagnose the CURRENT
+ * calendar billing month (starting first day 00:00 UTC), not a rolling
+ * 7/30/90-day lookback. No email details, logins, content or secrets
+ * are printed. NO GitHub writes.
  */
 function diagnoseQuotaFlowAlerts() {
   const cfg=qfProperties_();
@@ -125,7 +126,10 @@ function diagnoseQuotaFlowAlerts() {
     const reason=qfDiagnosticReason_(msg,cfg.owners);
     reasons[reason]=(reasons[reason]||0)+1;
   }
-  console.log(JSON.stringify({mode:"historic_readonly",lookback_days:90,
+  const billing=qfCalendarMonthUtc_();
+  console.log(JSON.stringify({mode:"current_calendar_month_readonly",
+      billing_period_start_utc:billing.startUtc,
+      billing_checked_through_utc:billing.nowUtc,
       scanned:ids.length,reason_counts:reasons,no_remote_writes:true}));
 }
 
@@ -148,9 +152,29 @@ function qfComment_(cfg,event) {
  * API path is always under users/me/messages and methods are GET only.
  * The full-access built-in mail service is intentionally not invoked.
  */
+function qfCalendarMonthUtc_(reference) {
+  const now=reference===undefined?new Date():new Date(reference);
+  if(Number.isNaN(now.getTime()))throw new Error("Invalid UTC reference time");
+  // This is GitHub's metered billing month: UTC 00:00 on calendar day 1.
+  // Query using epoch seconds: Gmail's YYYY/MM/DD form defaults to PST.
+  const first=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),1));
+  return {
+    startUtc:first.toISOString(),
+    startEpochSeconds:Math.floor(first.getTime()/1000),
+    nowUtc:now.toISOString()
+  };
+}
+function qfMonthSearch_(diagnostic,reference) {
+  const billing=qfCalendarMonthUtc_(reference);
+  // Gmail 'after:' is exclusive: subtract a second to include 00:00:00 UTC.
+  const subject=diagnostic?' subject:"Actions minutes"':"";
+  // No rolling window, and no future messages are in the mailbox at query time.
+  return "from:(github.com)"+subject+
+      " after:"+String(billing.startEpochSeconds-1);
+}
 function qfGmailApi_(suffix) {
-  const allowedList="?maxResults=60&q="+encodeURIComponent("from:(github.com) newer_than:7d");
-  const allowedHistorical="?maxResults=60&q="+encodeURIComponent('from:(github.com) subject:"Actions minutes" newer_than:90d');
+  const allowedList="?maxResults=60&q="+encodeURIComponent(qfMonthSearch_(false));
+  const allowedHistorical="?maxResults=60&q="+encodeURIComponent(qfMonthSearch_(true));
   if(typeof suffix!=="string" ||
      !(suffix===allowedList || suffix===allowedHistorical || /^\/[A-Za-z0-9_-]{1,200}\?format=full$/.test(suffix)))
     throw new Error("Unsafe Gmail API resource path");
@@ -166,11 +190,10 @@ function qfGmailApi_(suffix) {
     throw new Error("Invalid Gmail API JSON response");
   return raw;
 }
-function qfListMessageIds_(historicalReadOnly) {
-  // Historical diagnostics NEVER send receipts or update the processed ledger.
-  const q=encodeURIComponent(historicalReadOnly
-      ? 'from:(github.com) subject:"Actions minutes" newer_than:90d'
-      : "from:(github.com) newer_than:7d");
+function qfListMessageIds_(diagnosticReadOnly) {
+  // Both monitoring and diagnosis scan from day 1 of the CURRENT UTC month.
+  // Diagnosis NEVER sends receipts or alters the processed-message ledger.
+  const q=encodeURIComponent(qfMonthSearch_(diagnosticReadOnly===true));
   const response=qfGmailApi_("?maxResults=60&q="+q);
   if(response.nextPageToken)
     throw new Error("Gmail result exceeds safe 60-message window; manual review");
@@ -261,7 +284,11 @@ function pollGitHubQuotaAlerts() {
       accepted++;
     }
     if(!cfg.dryRun) props.setProperty("QF_PROCESSED_IDS_JSON",JSON.stringify(processed.slice(-450)));
-    console.log(JSON.stringify({dry_run:cfg.dryRun,scanned,verified_matches:accepted,manual_review:rejected}));
+    const billing=qfCalendarMonthUtc_();
+    console.log(JSON.stringify({dry_run:cfg.dryRun,
+        billing_period_start_utc:billing.startUtc,
+        billing_checked_through_utc:billing.nowUtc,
+        scanned,verified_matches:accepted,manual_review:rejected}));
   } finally {
     lock.releaseLock();
   }
